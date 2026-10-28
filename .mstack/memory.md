@@ -50,6 +50,16 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   `POST /v1/storage/stores/blob` returns 404 (via `eve integration setup
   file-memory` and `vercel blob create-store`). The team has no Blob stores.
   File memory cannot work on this team until that is resolved.
+- 2026-10-28: The Blob 404 is team-specific. The documented `POST
+  /storage/stores/blob` (with or without `projectId`) also returns 404
+  `not_found` on `miguelalcalde-vtest314`, while the same request on
+  `miguel-unbundled-vtest314` returned 200 (probe store deleted). Tracked in
+  issue #1. The Vercel CLI version (59.11.7) is not the cause.
+- 2026-10-28: Stories #1-#10 created in GitHub Issues. #2 (policy tests) is
+  the only one ready to implement now; #3-#5 wait on a deployment and
+  `GITHUB_TOKEN`.
+- 2026-10-28: The template ships without any token; each deployer supplies
+  their own. Issue #10 explores replacing the PAT with Vercel Connect.
 - 2026-10-27: mstack uses GitHub Issues (labels applied and verified), herdr
   session `default`, codex workers. high = `gpt-6.1-sol`; low = `gpt-6-luna`,
   then `gpt-5.6-luna`. All three verified via `codex exec`. Runs: 120 min,
