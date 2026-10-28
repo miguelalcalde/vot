@@ -1,0 +1,25 @@
+{
+  "tracker": { "issues": "github" },
+  "execution": {
+    "runtime": "herdr",
+    "harness": "codex",
+    "runtimeOptions": { "session": "default" }
+  },
+  "roles": {
+    "orchestrator": { "tier": "high" },
+    "research": { "tier": "high" },
+    "refinement": { "tier": "high" },
+    "implementation": { "tier": "low" },
+    "qa": { "tier": "low" }
+  },
+  "models": {
+    "codex": {
+      "high": ["gpt-6.1-sol"],
+      "low": ["gpt-6-luna", "gpt-5.6-luna"]
+    }
+  },
+  "run": {
+    "maxDurationMinutes": 120,
+    "onDeadline": "drain"
+  }
+}

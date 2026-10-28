@@ -40,6 +40,21 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - Full conversation, commit/revert against a real repo, and live skills on
   Vercel are not yet verified (no AI Gateway credentials, project not linked).
 
+- 2026-10-27: Baseline commit `ede854c` pushed to `main`. Commits need
+  `git -c user.signingkey=$HOME/.ssh/id_ed25519` because the SSH agent has no
+  identities loaded.
+- 2026-10-27: Vercel project `vot` on team `miguelalcalde-vtest314`
+  (`prj_CJtL76ze2oFC8lbNjeTBO6qiKgzs`), Git-connected to this repo. Vercel
+  Connect connector `vercel/vercel` attached (MCP). No deployments yet.
+- 2026-10-27: Blob store creation fails on this team: Vercel API
+  `POST /v1/storage/stores/blob` returns 404 (via `eve integration setup
+  file-memory` and `vercel blob create-store`). The team has no Blob stores.
+  File memory cannot work on this team until that is resolved.
+- 2026-10-27: mstack uses GitHub Issues (labels applied and verified), herdr
+  session `default`, codex workers. high = `gpt-6.1-sol`; low = `gpt-6-luna`,
+  then `gpt-5.6-luna`. All three verified via `codex exec`. Runs: 120 min,
+  drain.
+
 ## Open questions
 
 - Shared memory vs per-person memory (`byPrincipal`) for Slack and Teams.
