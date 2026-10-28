@@ -10,7 +10,7 @@ export default defineMcpClientConnection({
   description:
     "Vercel: check your own deployments and build status, read build and runtime logs, and search Vercel docs.",
   auth: connect({
-    connector: "vercel",
+    connector: "vercel/vercel",
     instructions:
       "Authorize Vercel in your browser. Select the team that owns this agent's project, then grant access to " +
       "its projects and deployments. Tools fail with a permission error for anything left unselected.",
