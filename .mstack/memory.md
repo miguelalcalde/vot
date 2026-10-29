@@ -74,13 +74,12 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   connection, not a PAT (#10, high priority); Slack in a test workspace with
   only Miguel as approver; Teams deferred; `main` protected against
   force-push/delete only; shared memory only (people deploy this themselves).
-- 2026-10-28: Rulesets/branch protection are unavailable on this private repo
-  without GitHub Pro (HTTP 403). #8 is blocked on making the repo public or
-  upgrading.
+- 2026-10-28: The repo is public (Miguel's decision; history scanned for
+  secrets first). Ruleset `protect-main-history` (id 26169674) blocks
+  force-push and deletion of `main`; fast-forward pushes still work.
 - Test the deployed agent with
   `pnpm exec eve invoke -u https://vot-iota.vercel.app --scope miguel-unbundled-vtest314 '<prompt>'`.
 
 ## Open questions
 
-- Make the repo public (it is a template), or stay private without branch
-  protection? Blocks #8.
+- None open right now. See the GitHub issues for story-level questions.
