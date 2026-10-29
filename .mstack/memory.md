@@ -65,9 +65,22 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   then `gpt-5.6-luna`. All three verified via `codex exec`. Runs: 120 min,
   drain.
 
+- 2026-10-28: Project moved to team `miguel-unbundled-vtest314`
+  (`prj_XaPws1TE6EzjvDuLUvNrLBsRxdW2`), Git-connected, Blob memory set up,
+  connector `vercel/vercel` attached. Production: https://vot-iota.vercel.app.
+  Memory verified across sessions. The old project on `miguelalcalde-vtest314`
+  is disconnected from Git, not deleted.
+- 2026-10-28 decisions (Miguel): GitHub access via a Vercel Connect GitHub
+  connection, not a PAT (#10, high priority); Slack in a test workspace with
+  only Miguel as approver; Teams deferred; `main` protected against
+  force-push/delete only; shared memory only (people deploy this themselves).
+- 2026-10-28: Rulesets/branch protection are unavailable on this private repo
+  without GitHub Pro (HTTP 403). #8 is blocked on making the repo public or
+  upgrading.
+- Test the deployed agent with
+  `pnpm exec eve invoke -u https://vot-iota.vercel.app --scope miguel-unbundled-vtest314 '<prompt>'`.
+
 ## Open questions
 
-- Shared memory vs per-person memory (`byPrincipal`) for Slack and Teams.
-- Do humans and dev agents use PRs on `main` while the deployed agent
-  pushes directly? Branch protection that requires PRs would block
-  `self_commit`.
+- Make the repo public (it is a template), or stay private without branch
+  protection? Blocks #8.
