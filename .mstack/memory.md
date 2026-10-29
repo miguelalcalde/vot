@@ -80,6 +80,24 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - Test the deployed agent with
   `pnpm exec eve invoke -u https://vot-iota.vercel.app --scope miguel-unbundled-vtest314 '<prompt>'`.
 
+- 2026-10-29 run `vot-run-20261028-a` (23:26-23:39Z, herdr + codex): #10
+  and #6 research passed and wait in refinement for Miguel's choices; #2
+  refinement and implementation passed (PR #11), QA waits on #12. New stories
+  #12 (fresh `pnpm install` fails) and #13 (Node 26 breaks the policy syntax
+  gate).
+- Codex `workspace-write` keeps `.git` read-only even when listed in
+  `writable_roots`, so codex workers in a worktree cannot commit. The
+  controller commits for them; credit the worker in the commit trailer and PR.
+- First codex launch in a new folder asks to trust it (Miguel approved
+  `vot`). herdr may label an idle codex as `working`; use `herdr agent wait`
+  instead of polling `agent read --lines` (that fails while working).
+- Fresh `pnpm install` exits 1 (`ERR_PNPM_IGNORED_BUILDS` for
+  `@mongodb-js/zstd`, `node-liblzma` via `just-bash`) and dirties
+  `pnpm-workspace.yaml`; pnpm then also fails `pnpm test` in its pre-script
+  check. Tracked as #12.
+- Under Node 26, `stripTypeScriptTypes` rejects `mode: "transform"`; the
+  policy would reject every `.ts` write. Production is Node 24. Tracked as #13.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
