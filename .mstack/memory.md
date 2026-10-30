@@ -13,10 +13,12 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   `self_revert` only (fast-forward, never forced, human-approved). Guardrails
   live in `agent/lib/self/policy.ts`, which is protected. See README "How
   self-modification stays safe".
-- 2026-10-23: GitHub auth is a fine-grained PAT scoped to this one repo
+- 2026-10-23: GitHub auth was a fine-grained PAT scoped to this one repo
   (Contents read/write, no Workflows). We chose it over the Vercel Connect
-  GitHub app because it is simpler to set up and the token itself is a hard
-  boundary.
+  GitHub app because it was simpler to set up and the token itself was a hard
+  boundary. **Superseded 2026-10-30 by Miguel's Connect-only decision in #10:**
+  use a dedicated Vercel Connect GitHub App connector restricted to this repo;
+  no PAT fallback and no deployer-created or copied token.
 - 2026-10-23: Live skills come from a dynamic skill resolver
   (`agent/skills/live.ts`) reading `agent/skills/` from `main` each turn,
   cached by commit SHA. It falls back to the deployed skills.

@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
 import { SELF_BRANCH, deployedSha, requireSelfRepo } from "../lib/self/config";
 import { listCommits } from "../lib/self/github";
@@ -10,9 +11,10 @@ export default defineTool({
     "(deployedSha), and the rules that limit what you may change about yourself.",
   inputSchema: z.object({ limit: z.number().int().min(1).max(30).default(10) }),
   label: { start: () => "Check own history" },
-  async execute({ limit }) {
+  async execute({ limit }, ctx) {
     const repo = requireSelfRepo();
-    const commits = await listCommits(repo, limit);
+    const authed = await toolRepo(ctx, repo);
+    const commits = await listCommits(authed, limit);
     const running = deployedSha();
     return {
       repo: `${repo.owner}/${repo.name}`,
