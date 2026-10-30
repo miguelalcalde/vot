@@ -51,8 +51,14 @@ export default teamsChannel();
 
 Follow the self-modify skill to commit, then confirm the deployment succeeded.
 
-## 4. Approvals in a shared channel
+## 4. Slack access and approvals
 
-In Slack or Teams anyone in the thread can click Approve. Suggest the owner set
-`SELF_APPROVERS` in Vercel to the principal IDs allowed to approve your changes
-(Slack looks like `slack:<team-id>:<user-id>`).
+In Slack, public and private channel messages require an explicit bot mention;
+one-to-one DMs do not. The app must be invited to each channel. Set
+`SELF_APPROVERS` in Vercel to the principal IDs allowed to approve your
+changes (Slack looks like `slack:<team-id>:<user-id>`). For Miguel as sole
+approver, use exactly his confirmed Slack team and user IDs. Approval prompts
+stay in the requesting thread.
+
+In Teams, anyone in the approval thread can click Approve unless the project
+configures its own approver restriction.
