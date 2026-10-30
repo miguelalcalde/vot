@@ -114,9 +114,15 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   production checks that need a merge first.
 - PR #11's policy suite asserts the `GITHUB_TOKEN` tripwire that #10 removes.
   Merge order: #14, then #11, then rebase #10 and update that one case.
-- 2026-10-30: A second fx controller session was seen in herdr pane `w1J:pF`
-  working on this backlog. mstack expects one controller per project; agree
-  which session controls before dispatching more work.
+- 2026-10-30: Miguel confirmed the fx session in herdr pane `w1J:p2` is the
+  only backlog controller. The fx session in `w1J:pF` is an informational
+  observer (it read state and suggested merges; no merge command found in its
+  history). PRs #14 and #11 were merged from Miguel's account; #11 merged
+  before its QA verdict (recorded on #2).
+- 2026-10-30: Connectors linked to the project: `github/vot`, `slack/vot`,
+  `vercel/vercel`. #10 verification uses `SELF_GITHUB_CONNECTOR=github/vot`.
+- 2026-10-30 decision (Miguel): Slack requires an @-mention everywhere except
+  DMs with the bot (in or out of a thread).
 
 ## Open questions
 
