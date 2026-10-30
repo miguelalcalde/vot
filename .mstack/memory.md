@@ -100,6 +100,32 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - Under Node 26, `stripTypeScriptTypes` rejects `mode: "transform"`; the
   policy would reject every `.ts` write. Production is Node 24. Tracked as #13.
 
+- 2026-10-30 run `vot-run-20261030-b` was interrupted before dispatch (its
+  idle workers were stopped later). Run `vot-run-20261030-c` (07:55-08:31Z):
+  #12 refined, implemented (PR #14) and QA PASS on AC1-AC5, with merge
+  proposed; #10 refined and implemented (draft PR #15), to be rebased after
+  #14 and #11; #6 refined, blocked on Miguel's Slack install and two
+  confirmations; #2 still waits on #12.
+- Codex's sandbox blocks file watchers (`eve dev` fails with EMFILE even at
+  `ulimit -n 65536`). Use an unsandboxed independent actor (for example an fx
+  subagent) for QA scenarios that need `eve dev`.
+- Workers' shell defaults to Node 26 / pnpm 12. Always pin
+  `/Users/miguel/.dotfiles/configs/.nvm/versions/node/v24.15.0/bin` in mandates.
+- Vercel Preview deployments are behind Deployment Protection; only the
+  production alias is reachable with `eve invoke`. Specs must not gate QA on
+  production checks that need a merge first.
+- PR #11's policy suite asserts the `GITHUB_TOKEN` tripwire that #10 removes.
+  Merge order: #14, then #11, then rebase #10 and update that one case.
+- 2026-10-30: Miguel confirmed the fx session in herdr pane `w1J:p2` is the
+  only backlog controller. The fx session in `w1J:pF` is an informational
+  observer (it read state and suggested merges; no merge command found in its
+  history). PRs #14 and #11 were merged from Miguel's account; #11 merged
+  before its QA verdict (recorded on #2).
+- 2026-10-30: Connectors linked to the project: `github/vot`, `slack/vot`,
+  `vercel/vercel`. #10 verification uses `SELF_GITHUB_CONNECTOR=github/vot`.
+- 2026-10-30 decision (Miguel): Slack requires an @-mention everywhere except
+  DMs with the bot (in or out of a thread).
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.

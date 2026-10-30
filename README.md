@@ -19,6 +19,17 @@ and Vercel's Git integration deploys it.
 
 ## Set up
 
+### Run the local policy tests
+
+Use Node 24.x, install dependencies with `pnpm install`, then run:
+
+```bash
+pnpm test
+```
+
+The policy suite runs locally and needs no service setup, credentials, or app
+process.
+
 1. **Clone and push** this template to your own GitHub repo, then install:
 
    ```bash
