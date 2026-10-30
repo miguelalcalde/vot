@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isHumanSlackAuthor, isSupportedSlackMention } from "../agent/lib/slack-admission.mjs";
+import { isHumanSlackAuthor } from "../agent/lib/slack-admission.mjs";
 
 test("admits an authenticated human author", () => {
   assert.equal(isHumanSlackAuthor({ userId: "U123", isBot: false }), true);
@@ -12,9 +12,12 @@ test("rejects missing, unidentified, and bot authors", () => {
   }
 });
 
-test("admits mentioned humans in public and private channels but rejects group DMs", () => {
+test("mention admission depends only on the author, matching real app_mention payloads without channel_type", () => {
   const human = { userId: "U123", isBot: false };
-  assert.equal(isSupportedSlackMention(human, { channel_type: "channel" }), true);
-  assert.equal(isSupportedSlackMention(human, { channel_type: "group" }), true);
-  assert.equal(isSupportedSlackMention(human, { channel_type: "mpim" }), false);
+  const bot = { userId: "U999", isBot: true };
+  // Real app_mention events (public channel, private channel or group DM) carry no channel_type.
+  for (const raw of [{ type: "app_mention", channel: "C1" }, { type: "app_mention", channel: "G1" }, { type: "app_mention", channel: "G2", thread_ts: "1.2" }]) {
+    assert.equal(isHumanSlackAuthor(human), true, JSON.stringify(raw));
+    assert.equal(isHumanSlackAuthor(bot), false, JSON.stringify(raw));
+  }
 });
