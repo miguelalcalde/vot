@@ -41,7 +41,7 @@ export async function loadLiveSkills(deps: {
   tree?: typeof getTree;
   blob?: typeof getBlobText;
   now?: () => number;
-} = {}, budgetMs = 5_000): Promise<Record<string, SkillDefinition> | null> {
+} = {}, budgetMs = 5_000, cancel?: AbortSignal): Promise<Record<string, SkillDefinition> | null> {
   const resolveRepo = deps.resolveRepo ?? resolveSelfRepo;
   const repo = deps.repo === undefined ? resolveRepo() : deps.repo;
   if (!repo) return null;
@@ -52,10 +52,15 @@ export async function loadLiveSkills(deps: {
   const blobRequest = deps.blob ?? getBlobText;
   const key = `${repo.owner}/${repo.name}`;
   const deadline = now() + budgetMs;
+  // `cancel` is aborted by the bounded wrapper when its timer fires, so a load
+  // that has already been given up can never publish to the caches afterwards,
+  // even if the injected clock lags the timer.
+  const timedOut = () => cancel?.aborted === true || now() >= deadline;
   const authed = await getAuthRepo(repo);
-  if (now() >= deadline) throw new Error("Live skill loading timed out.");
-  const signal = AbortSignal.timeout(Math.max(1, deadline - now()));
-  const ensureTime = () => { if (now() >= deadline || signal.aborted) throw new Error("Live skill loading timed out."); };
+  if (timedOut()) throw new Error("Live skill loading timed out.");
+  const timeout = AbortSignal.timeout(Math.max(1, deadline - now()));
+  const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
+  const ensureTime = () => { if (timedOut() || signal.aborted) throw new Error("Live skill loading timed out."); };
 
   const sha = await headRequest(authed, signal);
   ensureTime();
@@ -108,7 +113,7 @@ export async function loadLiveSkills(deps: {
     }
   }
 
-  if (now() > deadline) throw new Error("Live skill loading timed out.");
+  ensureTime();
   for (const [blobSha, value] of pendingBlobs) blobs.set(blobSha, value);
   cached = { repo: key, sha, skills };
   return skills;
@@ -116,10 +121,13 @@ export async function loadLiveSkills(deps: {
 
 export async function boundedLoadLiveSkills(deps: Parameters<typeof loadLiveSkills>[0] = {}, budgetMs = 5_000) {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = new AbortController();
   try {
     return await Promise.race([
-      loadLiveSkills(deps, budgetMs),
-      new Promise<null>((_, reject) => { timer = setTimeout(() => reject(new Error("Live skill loading timed out.")), budgetMs); }),
+      loadLiveSkills(deps, budgetMs, cancel.signal),
+      new Promise<null>((_, reject) => {
+        timer = setTimeout(() => { cancel.abort(); reject(new Error("Live skill loading timed out.")); }, budgetMs);
+      }),
     ]);
   } finally { if (timer) clearTimeout(timer); }
 }

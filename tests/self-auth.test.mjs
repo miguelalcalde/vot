@@ -273,3 +273,28 @@ test("AC6: invalid commits make no auth/network call; stale base rejects; commit
     prior.SELF_APPROVERS === undefined ? delete process.env.SELF_APPROVERS : process.env.SELF_APPROVERS = prior.SELF_APPROVERS;
   }
 });
+
+test("AC4 regression: a timed-out live load never publishes, even when the injected clock lags the timer", async () => {
+  resetLiveSkillCacheForTests();
+  const repo = { owner: "org", name: "agent" };
+  let finishBlob;
+  let blobCalls = 0;
+  const deps = {
+    repo,
+    now: () => 1_000, // the injected clock never reaches the deadline
+    getAuthRepo: async (r) => ({ ...r, token: "t", onUnauthorized() {} }),
+    head: async () => "head-1",
+    tree: async () => [{ type: "blob", path: "agent/skills/late.md", sha: "blob-late", size: 10 }],
+  };
+  const timedOut = await resilientLoadLiveSkills(
+    { ...deps, blob: () => { blobCalls++; return new Promise((resolve) => { finishBlob = resolve; }); } },
+    20,
+  );
+  assert.equal(timedOut, null);
+  finishBlob("---\ndescription: late skill\n---\nlate body");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const next = await loadLiveSkills({ ...deps, blob: async () => { blobCalls++; return "fresh"; } });
+  assert.equal(blobCalls, 2, "the late blob must not have been published to the blob cache");
+  assert.equal(next?.late?.markdown, "fresh");
+  resetLiveSkillCacheForTests();
+});
