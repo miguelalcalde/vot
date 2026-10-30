@@ -12,6 +12,7 @@
     "dev": "eve dev",
     "eval": "eve eval",
     "start": "eve start",
+    "test": "node --test --test-reporter=spec tests/self-policy.test.mjs",
     "typecheck": "tsc"
   },
   "dependencies": {
