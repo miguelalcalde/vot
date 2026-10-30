@@ -1,7 +1,8 @@
 import { defineTool } from "eve/tools";
 import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
-import { selfWriteApproval, requester } from "../lib/self/approval";
+import { always } from "eve/tools/approval";
+import { selfWriteResponse, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
 import { commitToMain, compare, getHeadSha, getTree, type TreeChange } from "../lib/self/github";
 import { checkPath } from "../lib/self/policy";
@@ -19,7 +20,7 @@ export default defineTool({
     reason: z.string().min(10).max(300),
   }),
   label: { start: ({ targetSha }) => `Roll back to ${targetSha.slice(0, 7)}` },
-  approval: selfWriteApproval,
+  approval: { request: always(), response: selfWriteResponse },
   async execute({ targetSha, baseSha, reason }, ctx) {
     const repo = requireSelfRepo();
     const authed = await toolRepo(ctx, repo);

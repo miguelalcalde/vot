@@ -1,7 +1,8 @@
 import { defineTool } from "eve/tools";
 import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
-import { selfWriteApproval, requester } from "../lib/self/approval";
+import { always } from "eve/tools/approval";
+import { selfWriteResponse, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
 import { commitToMain, getHeadSha } from "../lib/self/github";
 import { LIMITS, checkChanges, type FileChange } from "../lib/self/policy";
@@ -26,7 +27,7 @@ export default defineTool({
     files: z.array(fileChange).min(1).max(LIMITS.maxFiles),
   }),
   label: { start: ({ files }) => `Commit ${files.length} file(s) to ${SELF_BRANCH}` },
-  approval: selfWriteApproval,
+  approval: { request: always(), response: selfWriteResponse },
   async execute({ baseSha, message, files }, ctx) {
     // Validate before touching GitHub. Approval does not bypass policy.
     const problems = checkChanges(files as FileChange[]);
