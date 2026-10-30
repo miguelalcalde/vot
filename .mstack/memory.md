@@ -138,6 +138,18 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - `gh api user/installations` needs a GitHub App token (HTTP 403 with a
   normal gh login); connector permissions are not visible in the Vercel CLI.
 
+- 2026-10-30 policy (Miguel): QA gates on what can be verified before merge;
+  production-only scenarios (Slack events, live connector writes) are
+  post-merge delivery checks, and a failure reopens the story. Candidate for
+  promotion to AGENTS.md.
+- 2026-10-30 run `vot-run-20261030-e`: #2 closed (QA came after merge, noted).
+  #10: AC9 waived by Miguel; QA PASS AC1-AC8 on `8ca5ff7`; merge proposed;
+  `SELF_GITHUB_CONNECTOR=github/vot` set in Production. #6: QA caught that
+  Slack `app_mention` events carry no `channel_type`, so the group-DM filter
+  never worked; group-DM mentions are now admitted like channel mentions
+  (Miguel's rule); fix `e271890`, QA PASS; merge after #15 with a rebase
+  (both edit the `test` script and README).
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
