@@ -1,3 +1,5 @@
 minimumReleaseAgeStrict: true
 allowBuilds:
   sharp: false
+  '@mongodb-js/zstd': false
+  node-liblzma: false
