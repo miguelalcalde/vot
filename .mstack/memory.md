@@ -152,6 +152,15 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   (Miguel's rule); fix `e271890`, QA PASS; merge after #15 with a rebase
   (both edit the `test` script and README).
 
+- 2026-10-30 run `vot-run-20261030-f`: PR #15 merged (68ab86e) by Miguel.
+  AC10 part 1 PASS in production through Connect (head = deployed, no
+  `GITHUB_TOKEN`); part 2 (approved commit and revert) waits for Miguel's
+  approval. PR #16 merged `main` (`4658041`, `test` script runs all three
+  suites) and passed revalidation QA; merge proposed.
+- `eve invoke` against production fails with "Production auth is not
+  configured" when `.env.local`'s Vercel OIDC token has expired (about 12 h).
+  Refresh with `vercel env pull .env.local --environment development --yes`.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
