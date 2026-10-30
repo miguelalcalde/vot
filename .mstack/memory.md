@@ -13,10 +13,12 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   `self_revert` only (fast-forward, never forced, human-approved). Guardrails
   live in `agent/lib/self/policy.ts`, which is protected. See README "How
   self-modification stays safe".
-- 2026-10-23: GitHub auth is a fine-grained PAT scoped to this one repo
+- 2026-10-23: GitHub auth was a fine-grained PAT scoped to this one repo
   (Contents read/write, no Workflows). We chose it over the Vercel Connect
-  GitHub app because it is simpler to set up and the token itself is a hard
-  boundary.
+  GitHub app because it was simpler to set up and the token itself was a hard
+  boundary. **Superseded 2026-10-30 by Miguel's Connect-only decision in #10:**
+  use a dedicated Vercel Connect GitHub App connector restricted to this repo;
+  no PAT fallback and no deployer-created or copied token.
 - 2026-10-23: Live skills come from a dynamic skill resolver
   (`agent/skills/live.ts`) reading `agent/skills/` from `main` each turn,
   cached by commit SHA. It falls back to the deployed skills.
@@ -123,6 +125,32 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   `vercel/vercel`. #10 verification uses `SELF_GITHUB_CONNECTOR=github/vot`.
 - 2026-10-30 decision (Miguel): Slack requires an @-mention everywhere except
   DMs with the bot (in or out of a thread).
+
+- 2026-10-30 run `vot-run-20261030-d` (17:03-17:18Z): #2 QA PASS on main
+  `acb791c` (after merge; closure proposed). #10: AC10 moved post-merge;
+  PR #15 updated without force-push (merged main into the branch); QA found a
+  real AC4 race (a timed-out live load could still publish to the cache),
+  fixed in `8ca5ff7` with a regression test; re-QA PENDING only on AC9
+  dashboard evidence. #6: DM rule applied; PR #16; QA blocked on the Slack
+  install and a policy decision about production-only scenarios.
+- Avoid force-pushing feature branches: to update a PR onto `main`, merge
+  `main` into the branch and push a fast-forward.
+- QA via fx subagents worked well: unsandboxed, independent, and they found
+  a real defect that the implementer's own tests missed.
+- `gh api user/installations` needs a GitHub App token (HTTP 403 with a
+  normal gh login); connector permissions are not visible in the Vercel CLI.
+
+- 2026-10-30 policy (Miguel): QA gates on what can be verified before merge;
+  production-only scenarios (Slack events, live connector writes) are
+  post-merge delivery checks, and a failure reopens the story. Candidate for
+  promotion to AGENTS.md.
+- 2026-10-30 run `vot-run-20261030-e`: #2 closed (QA came after merge, noted).
+  #10: AC9 waived by Miguel; QA PASS AC1-AC8 on `8ca5ff7`; merge proposed;
+  `SELF_GITHUB_CONNECTOR=github/vot` set in Production. #6: QA caught that
+  Slack `app_mention` events carry no `channel_type`, so the group-DM filter
+  never worked; group-DM mentions are now admitted like channel mentions
+  (Miguel's rule); fix `e271890`, QA PASS; merge after #15 with a rebase
+  (both edit the `test` script and README).
 
 ## Open questions
 

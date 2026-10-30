@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
 import { selfWriteApproval, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
@@ -34,7 +35,8 @@ export default defineTool({
     }
 
     const repo = requireSelfRepo();
-    const head = await getHeadSha(repo);
+    const authed = await toolRepo(ctx, repo);
+    const head = await getHeadSha(authed);
     if (head !== baseSha) {
       throw new Error(
         `main is at ${head}, not ${baseSha}. Someone (maybe you, in a replayed step) changed it. ` +
@@ -44,7 +46,7 @@ export default defineTool({
 
     const fullMessage =
       `agent: ${message.trim()}\n\n` + `Eve-Session: ${ctx.session.id}\n` + `Eve-Requested-By: ${requester(ctx.session)}\n`;
-    const commit = await commitToMain(repo, baseSha, files, fullMessage);
+    const commit = await commitToMain(authed, baseSha, files, fullMessage);
     return {
       committed: commit.sha,
       url: commit.url,

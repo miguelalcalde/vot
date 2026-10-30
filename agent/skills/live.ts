@@ -14,6 +14,7 @@
  */
 import { defineDynamic, defineSkill, type SkillDefinition } from "eve/skills";
 import { resolveSelfRepo } from "../lib/self/config";
+import { selfAuthRepo } from "../lib/self/auth";
 import { getBlobText, getHeadSha, getTree } from "../lib/self/github";
 import { parseFrontmatter } from "../lib/self/policy";
 
@@ -22,7 +23,7 @@ const SKILL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const MAX_SIBLING_BYTES = 64 * 1024;
 const TEXT_FILE = /\.(md|txt|json|ya?ml|csv|sh|py|ts|js)$/;
 
-let cached: { sha: string; skills: Record<string, SkillDefinition> } | null = null;
+let cached: { repo: string; sha: string; skills: Record<string, SkillDefinition> } | null = null;
 const blobs = new Map<string, string>();
 
 function enabled(): boolean {
@@ -32,20 +33,49 @@ function enabled(): boolean {
   return Boolean(process.env.VERCEL_ENV);
 }
 
-async function loadLiveSkills(): Promise<Record<string, SkillDefinition> | null> {
-  const repo = resolveSelfRepo();
+export async function loadLiveSkills(deps: {
+  repo?: ReturnType<typeof resolveSelfRepo>;
+  resolveRepo?: typeof resolveSelfRepo;
+  getAuthRepo?: typeof selfAuthRepo;
+  head?: typeof getHeadSha;
+  tree?: typeof getTree;
+  blob?: typeof getBlobText;
+  now?: () => number;
+} = {}, budgetMs = 5_000, cancel?: AbortSignal): Promise<Record<string, SkillDefinition> | null> {
+  const resolveRepo = deps.resolveRepo ?? resolveSelfRepo;
+  const repo = deps.repo === undefined ? resolveRepo() : deps.repo;
   if (!repo) return null;
-  const signal = AbortSignal.timeout(5_000);
+  const now = deps.now ?? Date.now;
+  const getAuthRepo = deps.getAuthRepo ?? selfAuthRepo;
+  const headRequest = deps.head ?? getHeadSha;
+  const treeRequest = deps.tree ?? getTree;
+  const blobRequest = deps.blob ?? getBlobText;
+  const key = `${repo.owner}/${repo.name}`;
+  const deadline = now() + budgetMs;
+  // `cancel` is aborted by the bounded wrapper when its timer fires, so a load
+  // that has already been given up can never publish to the caches afterwards,
+  // even if the injected clock lags the timer.
+  const timedOut = () => cancel?.aborted === true || now() >= deadline;
+  const authed = await getAuthRepo(repo);
+  if (timedOut()) throw new Error("Live skill loading timed out.");
+  const timeout = AbortSignal.timeout(Math.max(1, deadline - now()));
+  const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
+  const ensureTime = () => { if (timedOut() || signal.aborted) throw new Error("Live skill loading timed out."); };
 
-  const sha = await getHeadSha(repo, signal);
-  if (cached?.sha === sha) return cached.skills;
+  const sha = await headRequest(authed, signal);
+  ensureTime();
+  if (cached?.repo === key && cached.sha === sha) return cached.skills;
 
-  const entries = (await getTree(repo, sha, signal)).filter((e) => e.type === "blob" && e.path.startsWith(ROOT));
+  const entries = (await treeRequest(authed, sha, signal)).filter((e) => e.type === "blob" && e.path.startsWith(ROOT));
+  ensureTime();
+  const pendingBlobs = new Map<string, string>();
   const text = async (blobSha: string) => {
     let value = blobs.get(blobSha);
     if (value === undefined) {
-      value = await getBlobText(repo, blobSha, signal);
-      blobs.set(blobSha, value);
+      ensureTime();
+      value = await blobRequest(authed, blobSha, signal);
+      ensureTime();
+      pendingBlobs.set(blobSha, value);
     }
     return value;
   };
@@ -83,8 +113,42 @@ async function loadLiveSkills(): Promise<Record<string, SkillDefinition> | null>
     }
   }
 
-  cached = { sha, skills };
+  ensureTime();
+  for (const [blobSha, value] of pendingBlobs) blobs.set(blobSha, value);
+  cached = { repo: key, sha, skills };
   return skills;
+}
+
+export async function boundedLoadLiveSkills(deps: Parameters<typeof loadLiveSkills>[0] = {}, budgetMs = 5_000) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = new AbortController();
+  try {
+    return await Promise.race([
+      loadLiveSkills(deps, budgetMs, cancel.signal),
+      new Promise<null>((_, reject) => {
+        timer = setTimeout(() => { cancel.abort(); reject(new Error("Live skill loading timed out.")); }, budgetMs);
+      }),
+    ]);
+  } finally { if (timer) clearTimeout(timer); }
+}
+
+export function resetLiveSkillCacheForTests() { cached = null; blobs.clear(); }
+
+export async function resilientLoadLiveSkills(deps: Parameters<typeof loadLiveSkills>[0] = {}, budgetMs = 5_000) {
+  const repo = deps.repo === undefined ? (deps.resolveRepo ?? resolveSelfRepo)() : deps.repo;
+  try { return await boundedLoadLiveSkills({ ...deps, repo }, budgetMs); }
+  catch {
+    return repo && cached?.repo === `${repo.owner}/${repo.name}` ? cached.skills : null;
+  }
+}
+
+export async function resolveLiveSkillsForTurn(shouldLoad: boolean, loader = resilientLoadLiveSkills) {
+  if (!shouldLoad) return null;
+  try { return await loader(); }
+  catch {
+    const repo = resolveSelfRepo();
+    return repo && cached?.repo === `${repo.owner}/${repo.name}` ? cached.skills : null;
+  }
 }
 
 export default defineDynamic({
@@ -92,10 +156,11 @@ export default defineDynamic({
     "turn.started": async () => {
       if (!enabled()) return null;
       try {
-        return await loadLiveSkills();
+        return await resolveLiveSkillsForTurn(true);
       } catch (error) {
-        console.warn("[live skills] falling back to deployed skills:", (error as Error).message);
-        return cached?.skills ?? null;
+        const repo = resolveSelfRepo();
+        console.warn("[live skills] falling back to deployed skills: authorization or loading failure");
+        return repo && cached?.repo === `${repo.owner}/${repo.name}` ? cached.skills : null;
       }
     },
   },
