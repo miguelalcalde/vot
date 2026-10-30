@@ -124,6 +124,20 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - 2026-10-30 decision (Miguel): Slack requires an @-mention everywhere except
   DMs with the bot (in or out of a thread).
 
+- 2026-10-30 run `vot-run-20261030-d` (17:03-17:18Z): #2 QA PASS on main
+  `acb791c` (after merge; closure proposed). #10: AC10 moved post-merge;
+  PR #15 updated without force-push (merged main into the branch); QA found a
+  real AC4 race (a timed-out live load could still publish to the cache),
+  fixed in `8ca5ff7` with a regression test; re-QA PENDING only on AC9
+  dashboard evidence. #6: DM rule applied; PR #16; QA blocked on the Slack
+  install and a policy decision about production-only scenarios.
+- Avoid force-pushing feature branches: to update a PR onto `main`, merge
+  `main` into the branch and push a fast-forward.
+- QA via fx subagents worked well: unsandboxed, independent, and they found
+  a real defect that the implementer's own tests missed.
+- `gh api user/installations` needs a GitHub App token (HTTP 403 with a
+  normal gh login); connector permissions are not visible in the Vercel CLI.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
