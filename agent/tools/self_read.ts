@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
 import { getBlobText, getHeadSha, getTree } from "../lib/self/github";
@@ -13,11 +14,12 @@ export default defineTool({
     path: z.string().default("agent").describe('Repo-relative path, e.g. "agent/skills" or "agent/instructions.md".'),
   }),
   label: { start: ({ path }) => `Read ${path}` },
-  async execute({ path }) {
+  async execute({ path }, ctx) {
     const repo = requireSelfRepo();
+    const authed = await toolRepo(ctx, repo);
     const clean = path.replace(/^\/+|\/+$/g, "");
-    const headSha = await getHeadSha(repo);
-    const tree = await getTree(repo, headSha);
+    const headSha = await getHeadSha(authed);
+    const tree = await getTree(authed, headSha);
 
     const file = tree.find((e) => e.type === "blob" && e.path === clean);
     if (file) {
@@ -26,7 +28,7 @@ export default defineTool({
         path: clean,
         type: "file" as const,
         writable: checkPath(clean).ok,
-        content: await getBlobText(repo, file.sha),
+        content: await getBlobText(authed, file.sha),
       };
     }
 

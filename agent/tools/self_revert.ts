@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
 import { selfWriteApproval, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
@@ -21,18 +22,19 @@ export default defineTool({
   approval: selfWriteApproval,
   async execute({ targetSha, baseSha, reason }, ctx) {
     const repo = requireSelfRepo();
-    const head = await getHeadSha(repo);
+    const authed = await toolRepo(ctx, repo);
+    const head = await getHeadSha(authed);
     if (head !== baseSha) throw new Error(`main is at ${head}, not ${baseSha}. Check self_history and retry.`);
     if (targetSha === head) throw new Error("targetSha is already the head of main.");
 
     // targetSha must be a recent ancestor of main.
-    const diff = await compare(repo, targetSha, head);
+    const diff = await compare(authed, targetSha, head);
     if (diff.status !== "ahead") throw new Error(`${targetSha} is not an ancestor of ${SELF_BRANCH}.`);
     // GitHub's compare API lists at most 300 files; refuse rather than half-revert.
     if (diff.files.length >= MAX_FILES) throw new Error("Too many changes since that commit to roll back safely.");
 
     const targetTree = new Map(
-      (await getTree(repo, targetSha)).filter((e) => e.type === "blob").map((e) => [e.path, e.sha]),
+      (await getTree(authed, targetSha)).filter((e) => e.type === "blob").map((e) => [e.path, e.sha]),
     );
 
     const changes: TreeChange[] = [];
@@ -51,7 +53,7 @@ export default defineTool({
     const message =
       `agent: roll back to ${targetSha.slice(0, 7)}\n\n${reason.trim()}\n\n` +
       `Eve-Session: ${ctx.session.id}\nEve-Requested-By: ${requester(ctx.session)}\n`;
-    const commit = await commitToMain(repo, head, changes, message);
+    const commit = await commitToMain(authed, head, changes, message);
     return { committed: commit.sha, url: commit.url, restored: changes.map((c) => c.path), skippedProtected: skipped };
   },
 });

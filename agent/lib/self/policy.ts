@@ -4,7 +4,7 @@
  * client, the self_* tools, and the self-modify skill are all protected.
  *
  * Defense in depth, outermost first:
- *   1. The GitHub token is scoped to this one repo, without Workflows access.
+ *   1. Vercel Connect requests a token restricted to this one repo.
  *   2. Every write needs human approval (optionally from SELF_APPROVERS only).
  *   3. This policy: path allowlist, protected paths, size and content checks.
  *   4. Commits are fast-forward only on main, never forced.
@@ -58,7 +58,9 @@ const SECRET_PATTERNS: readonly [string, RegExp][] = [
  * powers self-modification; otherwise a new tool could bypass this policy.
  */
 const FORBIDDEN_IN_CODE: readonly [string, RegExp][] = [
-  ["the GitHub token", /GITHUB_TOKEN/],
+  ["self-connector configuration", /SELF_GITHUB_CONNECTOR/],
+  ["the default self connector", /github\/self\b/],
+  ["GitHub App installation authorization", /github_app_installation/],
   ["the GitHub API", /api\.github\.com/],
   ["the self-modification internals", /lib\/self\b/],
 ];

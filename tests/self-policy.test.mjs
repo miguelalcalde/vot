@@ -62,7 +62,7 @@ test("parameter property TypeScript is accepted", () =>
   accepted([{ path: tool, content: "export class Example { constructor(public value: string) {} }" }]));
 
 for (const [name, content, reason] of [
-  ["GitHub token reference", "export const token = process.env.GITHUB_TOKEN;", /reference the GitHub token/],
+  ["self-connector configuration reference", "export const connector = process.env.SELF_GITHUB_CONNECTOR;", /reference self-connector configuration/],
   ["GitHub API reference", "export const url = 'https://api.github.com';", /reference the GitHub API/],
   ["self internals reference", "export const path = 'lib/self/policy';", /reference the self-modification internals/],
 ]) {

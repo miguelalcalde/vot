@@ -7,19 +7,20 @@
  * This file is protected: the agent cannot change it through self_commit.
  */
 import { SELF_BRANCH, type SelfRepo } from "./config";
+type AuthenticatedRepo = SelfRepo & { readonly token: string; readonly onUnauthorized?: () => unknown };
 
 const API = "https://api.github.com";
 
 export class GitHubError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
-    super(message);
+    super(status === 401 ? "GitHub rejected Connect authorization (401). Check the connector installation and repository grant in README dashboard setup." : message.replace(/(Bearer\s+)[^\s]+/gi, "$1[redacted]"));
     this.status = status;
   }
 }
 
 async function gh<T>(
-  repo: SelfRepo,
+  repo: AuthenticatedRepo,
   path: string,
   init: { method?: string; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
@@ -35,7 +36,8 @@ async function gh<T>(
     signal: init.signal ?? AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    if (res.status === 401) await repo.onUnauthorized?.();
+    const text = res.status === 401 ? "" : await res.text().catch(() => "");
     throw new GitHubError(res.status, `GitHub ${init.method ?? "GET"} ${path} -> ${res.status}: ${text.slice(0, 300)}`);
   }
   return (await res.json()) as T;
@@ -57,18 +59,18 @@ export interface CommitSummary {
 }
 
 /** Current SHA at the tip of main. */
-export async function getHeadSha(repo: SelfRepo, signal?: AbortSignal): Promise<string> {
+export async function getHeadSha(repo: AuthenticatedRepo, signal?: AbortSignal): Promise<string> {
   const ref = await gh<{ object: { sha: string } }>(repo, `/git/ref/heads/${SELF_BRANCH}`, { signal });
   return ref.object.sha;
 }
 
-export async function getCommitTreeSha(repo: SelfRepo, commitSha: string, signal?: AbortSignal): Promise<string> {
+export async function getCommitTreeSha(repo: AuthenticatedRepo, commitSha: string, signal?: AbortSignal): Promise<string> {
   const commit = await gh<{ tree: { sha: string } }>(repo, `/git/commits/${commitSha}`, { signal });
   return commit.tree.sha;
 }
 
 /** Full recursive tree for a commit. */
-export async function getTree(repo: SelfRepo, commitSha: string, signal?: AbortSignal): Promise<TreeEntry[]> {
+export async function getTree(repo: AuthenticatedRepo, commitSha: string, signal?: AbortSignal): Promise<TreeEntry[]> {
   const treeSha = await getCommitTreeSha(repo, commitSha, signal);
   const tree = await gh<{ tree: TreeEntry[]; truncated: boolean }>(repo, `/git/trees/${treeSha}?recursive=1`, {
     signal,
@@ -77,13 +79,13 @@ export async function getTree(repo: SelfRepo, commitSha: string, signal?: AbortS
   return tree.tree;
 }
 
-export async function getBlobText(repo: SelfRepo, blobSha: string, signal?: AbortSignal): Promise<string> {
+export async function getBlobText(repo: AuthenticatedRepo, blobSha: string, signal?: AbortSignal): Promise<string> {
   const blob = await gh<{ content: string; encoding: string }>(repo, `/git/blobs/${blobSha}`, { signal });
   if (blob.encoding !== "base64") throw new Error(`Unexpected blob encoding ${blob.encoding}.`);
   return Buffer.from(blob.content, "base64").toString("utf8");
 }
 
-export async function listCommits(repo: SelfRepo, limit: number): Promise<CommitSummary[]> {
+export async function listCommits(repo: AuthenticatedRepo, limit: number): Promise<CommitSummary[]> {
   const commits = await gh<
     { sha: string; commit: { message: string; author: { name: string; date: string } | null } }[]
   >(repo, `/commits?sha=${SELF_BRANCH}&per_page=${limit}`);
@@ -103,7 +105,7 @@ export interface CompareFile {
 
 /** Files changed between two commits, plus whether `base` is an ancestor of `head`. */
 export async function compare(
-  repo: SelfRepo,
+  repo: AuthenticatedRepo,
   base: string,
   head: string,
 ): Promise<{ status: string; files: CompareFile[] }> {
@@ -123,7 +125,7 @@ export type TreeChange =
  * `parentSha` was read. Nothing is ever overwritten.
  */
 export async function commitToMain(
-  repo: SelfRepo,
+  repo: AuthenticatedRepo,
   parentSha: string,
   changes: readonly TreeChange[],
   message: string,
