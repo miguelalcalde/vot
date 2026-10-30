@@ -82,7 +82,12 @@ process.
 
 6. **Deploy** by pushing to `main` (or `pnpm exec eve deploy`).
 
-7. **Optional: add channels.** Each needs a workspace admin once:
+7. **Optional: add channels.** Each needs a workspace admin once. Slack uses
+   Vercel Connect; invite the installed bot to each public or private channel.
+   Public and private messages need an explicit bot mention; one-to-one DMs do
+   not. Set `SELF_APPROVERS` in Vercel to the allowed Slack principal, formatted
+   `slack:<team-id>:<user-id>` (use Miguel's ID when he should be the sole
+   approver):
 
    ```bash
    pnpm exec eve add channel/slack
