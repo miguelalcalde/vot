@@ -161,6 +161,15 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   configured" when `.env.local`'s Vercel OIDC token has expired (about 12 h).
   Refresh with `vercel env pull .env.local --environment development --yes`.
 
+- 2026-10-30 decision (Miguel): when a PR passes independent QA, the
+  controller merges it without asking, then reports. Approving agent
+  self-writes (tool approval) stays with Miguel.
+- 2026-10-30: #17 (approval crash) fixed in PR #18 (805ff12): eve compiles a
+  non-literal `approval` value as a request function, so declare
+  `approval: { request, response }` inline. Approved self_commit then worked
+  in production via the GitHub App `vot-ma[bot]` (6587c79, 5fdf8f9), and the
+  live ping skill answered. self_revert is still to be exercised.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
