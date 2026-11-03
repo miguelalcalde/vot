@@ -170,6 +170,17 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   in production via the GitHub App `vot-ma[bot]` (6587c79, 5fdf8f9), and the
   live ping skill answered. self_revert is still to be exercised.
 
+- 2026-11-03: Housekeeping done: merged worktrees and branches removed (local
+  and remote), the old Vercel project on `miguelalcalde-vtest314` deleted
+  (its `vercel/vercel` connector on that team remains), and the delivery
+  rules promoted to `AGENTS.md` (`3d4f78f`). The approved self_revert
+  `a51c0a0` closed #10 and #17.
+- To approve a pending tool request on the remote agent from the CLI,
+  `eve invoke --resume "approve"` did not work (the text arrived as a new
+  message and the agent asked again). POST to `/eve/v1/session/<id>` with
+  `{"inputResponses":[{"requestId":"...","optionId":"approve"}]}` and the
+  project's Vercel OIDC token works.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
