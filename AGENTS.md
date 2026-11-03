@@ -10,6 +10,22 @@ gated by `agent/lib/self/policy.ts`. When you edit this repo:
   `agent/skills/live.ts`, `agent/skills/self-modify/`) must stay in `PROTECTED`.
 - Keep `microsandbox` pinned to the version eve's peer range expects.
 
+## Delivery rules
+
+Work is tracked with mstack in GitHub Issues (`.mstack/config.json`). One fx
+session is the backlog controller; other sessions only observe.
+
+- QA gates on what can be verified before merge. Behavior that is only
+  observable in production (Slack events, live connector writes) is a
+  post-merge delivery check; a failure there reopens the story.
+- QA is done by an actor that did not implement the change. When QA passes,
+  the controller merges the PR and reports afterwards.
+- Approving the agent's own self-writes (tool approval prompts) is a human
+  decision.
+- Never force-push. To update a PR branch with `main`, merge `main` into it.
+- Declare tool `approval` inline as `{ request, response }`; eve compiles a
+  non-literal value as a request function.
+
 This project uses the eve framework: an agent is a directory of files under `agent/`, and eve compiles and runs it.
 
 For a content-only change to the root agent's identity, purpose, tone, or response guidelines, edit its existing authored instructions. Fresh projects use `agent/instructions.md`; a project may instead use `agent/instructions.ts` or files under `agent/instructions/`. You do not need to read the framework docs for a content-only instructions change. A fresh project already has its selected model in `agent/agent.ts`; preserve that file unless the user asks to change the model.
