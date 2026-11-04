@@ -134,10 +134,17 @@ function checkContent(path: string, content: string): string[] {
       if (pattern.test(content)) problems.push(`code must not reference ${label}.`);
     }
     try {
-      // "transform" also accepts enums and parameter properties; it still rejects bad syntax.
-      stripTypeScriptTypes(content, { mode: "transform" });
+      stripTypeScriptTypes(content, { mode: "strip" });
     } catch (error) {
-      problems.push(`TypeScript syntax error: ${(error as Error).message.slice(0, 300)}`);
+      const code = errorCode(error);
+      if (code !== "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX") {
+        const detail = errorDetail(error);
+        if (code === "ERR_INVALID_TYPESCRIPT_SYNTAX") {
+          problems.push(`TypeScript syntax error: ${detail}`);
+        } else {
+          problems.push(`TypeScript syntax validation could not be completed: ${detail}`);
+        }
+      }
     }
   }
 
@@ -149,6 +156,30 @@ function checkContent(path: string, content: string): string[] {
     }
   }
   return problems;
+}
+
+function errorCode(error: unknown): unknown {
+  if (typeof error !== "object" || error === null) return undefined;
+  try {
+    return "code" in error ? error.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function errorDetail(error: unknown): string {
+  let detail: string;
+  try {
+    if (typeof error === "string") detail = error;
+    else if (typeof error === "object" && error !== null && "message" in error) {
+      const message = error.message;
+      detail = typeof message === "string" ? message : String(message);
+    } else if (typeof error === "object" && error !== null) detail = "Unknown validator failure";
+    else detail = String(error);
+  } catch {
+    detail = "Unknown validator failure";
+  }
+  return (detail || "Unknown validator failure").slice(0, 300);
 }
 
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
