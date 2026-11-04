@@ -37,8 +37,11 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - On Miguel's machine, `~/.microsandbox` was migrated by a newer microsandbox,
   so 0.5.5 cannot open it locally. Use Docker or just-bash locally. Left
   untouched on purpose.
-- Node `stripTypeScriptTypes` must use `mode: "transform"` in the policy
-  syntax gate; `strip` rejects enums and parameter properties.
+- Superseded (#13, 2026-11-04): the policy syntax gate now uses
+  `stripTypeScriptTypes(..., { mode: "strip" })` and accepts the exact
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` code (enums, parameter properties);
+  `ERR_INVALID_TYPESCRIPT_SYNTAX` is rejected and anything else fails closed.
+  Works on Node 24 and 26.
 - Full conversation, commit/revert against a real repo, and live skills on
   Vercel are not yet verified (no AI Gateway credentials, project not linked).
 
@@ -97,8 +100,8 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   `@mongodb-js/zstd`, `node-liblzma` via `just-bash`) and dirties
   `pnpm-workspace.yaml`; pnpm then also fails `pnpm test` in its pre-script
   check. Tracked as #12.
-- Under Node 26, `stripTypeScriptTypes` rejects `mode: "transform"`; the
-  policy would reject every `.ts` write. Production is Node 24. Tracked as #13.
+- Under Node 26, `stripTypeScriptTypes` rejects `mode: "transform"`. Fixed
+  by #13 (PR #20, 2641baa).
 
 - 2026-10-30 run `vot-run-20261030-b` was interrupted before dispatch (its
   idle workers were stopped later). Run `vot-run-20261030-c` (07:55-08:31Z):
@@ -180,6 +183,18 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
   message and the agent asked again). POST to `/eve/v1/session/<id>` with
   `{"inputResponses":[{"requestId":"...","optionId":"approve"}]}` and the
   project's Vercel OIDC token works.
+
+- 2026-11-04: Miguel's Slack principal is `slack:T0CAQ00TU:U070KLXH8MB`
+  (Enterprise Grid org E0AR02RR6V6), set as `SELF_APPROVERS` in Production,
+  so CLI/TUI (OIDC) approvals are now rejected. Kit has Slack read access
+  for checking the bot's DMs.
+- 2026-11-04 backlog cleanup: closed #1, #3, #8, #9 (delivered or decided)
+  and #7 (Teams, not planned for now); #4 re-scoped to "skill applies
+  before the deploy finishes"; #5 back to research (the Vercel connection
+  uses a per-user principal, so service sessions cannot use it); filed #19
+  (Deploy button and first-run setup check).
+- 2026-11-04 run `vot-run-20261104-g`: #13 researched, refined,
+  implemented and QA'd (Node 24 and 26), merged by the controller as PR #20.
 
 ## Open questions
 
