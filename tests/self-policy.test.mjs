@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import moduleBuiltin, { syncBuiltinESMExports } from "node:module";
 import { checkChanges, checkPath } from "../agent/lib/self/policy.ts";
 
 const skill = "agent/skills/example/SKILL.md";
@@ -60,6 +61,100 @@ test("enum TypeScript is accepted", () =>
   accepted([{ path: tool, content: "export enum Status { Ready }" }]));
 test("parameter property TypeScript is accepted", () =>
   accepted([{ path: tool, content: "export class Example { constructor(public value: string) {} }" }]));
+
+for (const extension of ["ts", "mts", "tsx"]) {
+  for (const [name, content] of [
+    ["typed export", ordinaryTs],
+    ["enum", "export enum Status { Ready }"],
+    ["parameter property", "export class Example { constructor(public value: string) {} }"],
+  ]) {
+    test(`${name} passes in .${extension}`, () =>
+      accepted([{ path: `agent/tools/example.${extension}`, content }]));
+  }
+}
+
+const malformedAroundDeclarations = [
+  ...["export enum Status { Ready }", "export class Example { constructor(public value: string) {} }"].flatMap((declaration) => [
+    [`invalid expression before ${declaration.startsWith("export enum") ? "enum" : "parameter property"}`, `const broken = ;\n${declaration}`],
+    [`invalid expression after ${declaration.startsWith("export enum") ? "enum" : "parameter property"}`, `${declaration}\nconst broken = ;`],
+  ]),
+  ["invalid expression inside parameter-property constructor", "export class Example { constructor(public value: string) { const broken = ; } }"],
+  ["invalid expression inside enum initializer", "enum E { A = (() => { const broken = ; })() }"],
+];
+for (const [name, content] of [
+  ["missing expression", "export const value = ;"],
+  ["malformed enum initializer", "export enum Status { Ready = }"],
+  ["malformed parameter type", "export class Example { constructor(public value: ) {} }"],
+  ...malformedAroundDeclarations,
+]) {
+  test(`${name} is rejected as TypeScript syntax`, () => {
+    const path = "agent/tools/example.ts";
+    const problems = checkChanges([{ path, content }]);
+    assert.ok(problems.some((problem) => problem.includes(`${path}: TypeScript syntax error:`)), problems.join("\n"));
+  });
+}
+
+test("runtime namespace and import alias remain accepted", () => {
+  accepted([{ path: tool, content: "namespace N { export const value = 1; }" }]);
+  accepted([{ path: tool, content: "import fs = require('node:fs');" }]);
+});
+
+function withStripper(replacement, run) {
+  const original = moduleBuiltin.stripTypeScriptTypes;
+  try {
+    moduleBuiltin.stripTypeScriptTypes = replacement;
+    syncBuiltinESMExports();
+    run();
+  } finally {
+    moduleBuiltin.stripTypeScriptTypes = original;
+    syncBuiltinESMExports();
+  }
+}
+
+test("only exact unsupported TypeScript syntax code passes after a strip failure", () => {
+  withStripper(() => { throw Object.assign(new Error("anything"), { code: "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX" }); }, () =>
+    accepted([{ path: tool, content: ordinaryTs }]),
+  );
+  withStripper(() => { throw Object.assign(new Error("unsupported but invalid"), { code: "ERR_INVALID_TYPESCRIPT_SYNTAX" }); }, () =>
+    rejectedContent(ordinaryTs, /TypeScript syntax error/, tool),
+  );
+  for (const error of [new SyntaxError("unsupported"), Object.assign(new Error("unsupported"), { code: "OTHER" })]) {
+    withStripper(() => { throw error; }, () =>
+      rejectedContent(ordinaryTs, /TypeScript syntax validation could not be completed/, tool),
+    );
+  }
+});
+
+test("unexpected stripper failures fail closed with safe bounded detail", () => {
+  const failures = [
+    Object.assign(new Error("bad options"), { code: "ERR_INVALID_ARG_VALUE" }),
+    new Error("ordinary failure"), "string failure", null, {}, new Error("x".repeat(500)),
+  ];
+  for (const failure of failures) {
+    withStripper(() => { throw failure; }, () => {
+      let problems;
+      assert.doesNotThrow(() => { problems = checkChanges([{ path: tool, content: ordinaryTs }]); });
+      const diagnostic = problems.find((problem) => problem.includes(`${tool}: TypeScript syntax validation could not be completed:`));
+      assert.ok(diagnostic, problems.join("\n"));
+      const detail = diagnostic.slice(diagnostic.indexOf("completed:") + "completed: ".length);
+      assert.ok(detail.length <= 300, `diagnostic detail was ${detail.length} characters`);
+    });
+  }
+});
+
+test("non-erasable syntax does not bypass reference or secret checks", () => {
+  rejectedContent("export enum Status { Ready }\nexport const url = 'https://api.github.com';", /reference the GitHub API/, tool);
+  rejectedContent("export class Example { constructor(public value: string) {} }\n// synthetic ghp_ABCDEFGHIJKLMNOPQRST", /GitHub token/, tool);
+});
+
+test("candidate TypeScript is parsed without executing it", () => {
+  const sentinel = "__vot_policy_syntax_gate_sentinel__";
+  delete globalThis[sentinel];
+  accepted([{ path: tool, content: `globalThis.${sentinel} = true;\nexport const value: string = 'ok';` }]);
+  accepted([{ path: tool, content: "throw new Error('MUST NOT EXECUTE');\nexport const value: string = 'ok';" }]);
+  assert.equal(globalThis[sentinel], undefined);
+  assert.equal(checkPath("agent/lib/self/policy.ts").ok, false);
+});
 
 for (const [name, content, reason] of [
   ["self-connector configuration reference", "export const connector = process.env.SELF_GITHUB_CONNECTOR;", /reference self-connector configuration/],
