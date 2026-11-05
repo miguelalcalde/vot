@@ -196,6 +196,22 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - 2026-11-04 run `vot-run-20261104-g`: #13 researched, refined,
   implemented and QA'd (Node 24 and 26), merged by the controller as PR #20.
 
+- 2026-11-05 run `vot-run-20261104-h`: Miguel's decisions: #5 uses a
+  shared read-only token (`SELF_VERCEL_TOKEN`, deployments and build logs
+  only) and replaces the Vercel MCP connection; #19 turns memory off until
+  Blob is set up and accepts all other draft recommendations. #5 merged as
+  PR #21 (71ae54b) and #19 as PR #22 (b851316), both after independent QA
+  PASS; the controller merged both. Post-merge: production memory still
+  recalls and the setup check flags `SELF_VERCEL_TOKEN`. Pending: Miguel
+  creates the project-scoped token for #5's live checks, and runs a fresh
+  Deploy-button clone for #19. Follow-up #23 filed (stale instructions,
+  add-channel skill, "Working ingress" noise). The `vercel/vercel`
+  connector is still linked to the project, though no code uses it now.
+- Gotcha: under the user shell profile `pnpm` fails with
+  `_socket_fw_wrap: command not found`; run pnpm with the clean profile.
+- Gotcha: `eve info` lists only static instructions; dynamic ones under
+  `agent/instructions/*.ts` show up in the compiled `.output/server`.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
