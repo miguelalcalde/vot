@@ -46,7 +46,7 @@ export async function selfAuthRepo(
 
 export function authFailure(error: unknown, uid: string, repo: Pick<SelfRepo, "owner" | "name">): Error {
   const message = error instanceof Error ? `${(error as Error & { code?: string }).code ?? ""} ${error.message}`.toLowerCase() : "";
-  let remedy = "Check the Connect connector, project link, executing environment, GitHub installation, and repository grant in README dashboard setup.";
+  let remedy = "Check the Connect connector, project link, executing environment, GitHub installation, and repository grant in README dashboard setup. Access remains unverified; retry temporary failures before changing configuration.";
   if (/connector.*(not found|unknown)|connector_not_found/.test(message)) remedy = "Create/check the Connect connector in the Vercel dashboard, then see README dashboard setup.";
   else if (/project.*(not linked|unlinked)|not_linked|environment.*disabled/.test(message)) remedy = "Link the Vercel project and enable the executing environment in connector settings; see README dashboard setup.";
   else if (/installation.*(required|missing|pending)|not installed|installation_required/.test(message)) remedy = "Install and approve the GitHub App for this repository; see README dashboard setup.";
