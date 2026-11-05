@@ -54,7 +54,14 @@ export default defineTool({
       files: files.map((f) => ("delete" in f ? `deleted ${f.path}` : f.path)),
       next:
         "Skills under agent/skills apply on your next turn. Anything else applies once Vercel deploys this commit; " +
-        "check the deployment through the Vercel connection and self_revert if it fails.",
+        "call self_deployments with sha equal to the exact full committed SHA. At most three checks " +
+        "(initial plus two retries, including transient failures); stop early on READY, ERROR/CANCELED/BLOCKED " +
+        "or setup/auth/permission failure. Only exact SHA matches count; report the newest match and target. " +
+        "READY proves readiness, not live production aliases. Recheck missing/pending within the bound, then " +
+        "report committed SHA and pending verification. On access/transport failure say cannot inspect with " +
+        "the reason. Never substitute an unrelated commit or revert because inspection failed or results " +
+        "are absent. For an observed ERROR inspect self_build_log, then follow self_revert guidance with " +
+        "human approval. Report canceled/blocked as such. Skill-only changes need no deployment check.",
     };
   },
 });
