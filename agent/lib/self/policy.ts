@@ -26,8 +26,9 @@ export const WRITABLE = [
   "README.md",
 ] as const;
 
-/** Paths inside WRITABLE that stay human-only. These win over WRITABLE. */
+/** Human-only paths. These win over WRITABLE. */
 export const PROTECTED = [
+  "agent/instructions/setup.ts",
   "agent/lib/self/",
   "agent/tools/self_",
   "agent/skills/live.ts",

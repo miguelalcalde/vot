@@ -1,5 +1,6 @@
 import { defineMemory } from "eve/memory";
 import { fileMemory } from "eve/memory/file";
+import { sharedMemoryScope } from "./lib/self/setup";
 
 /**
  * One shared notebook for the whole agent: durable facts about its team,
@@ -16,5 +17,5 @@ export default defineMemory({
     "Your shared notebook: durable facts about your team, their preferences and conventions, and lessons learned. " +
     "Everyone you talk to sees it, so never store secrets or private personal data.",
   provider: fileMemory({ maxCharacters: 8_000 }),
-  scope: "agent",
+  scope: () => sharedMemoryScope(process.env),
 });
