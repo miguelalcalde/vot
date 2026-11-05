@@ -1,7 +1,7 @@
 # vot
 
 A self-modifying [eve](https://eve.dev) agent template. Its code lives in
-GitHub, Vercel deploys it from `main`, and the agent can read and change both,
+GitHub, Vercel deploys it from `main`, and the agent can inspect deployments and change its source,
 behind a human approval and a code-enforced policy.
 
 It ships with the minimum needed to improve itself:
@@ -11,7 +11,7 @@ It ships with the minimum needed to improve itself:
 | Memory               | One shared notebook (`fileMemory`, private Vercel Blob)     | Next turn, no commit    |
 | Live skills          | `agent/skills/` loaded from `main` on every turn            | Next turn after commit  |
 | Self-repo tools      | `self_read`, `self_history`, `self_commit`, `self_revert`   | -                       |
-| Vercel connection    | Vercel MCP: its own deployments, build status, logs         | -                       |
+| Deployment reads    | `self_deployments`, `self_build_log`: own project only      | -                       |
 | Channel skill        | Guides adding Slack or Microsoft Teams                      | After setup and deploy  |
 
 Everything else (instructions, tools, channels) is code: the agent commits it
@@ -74,11 +74,29 @@ process.
    pnpm exec eve integration setup file-memory
    ```
 
-5. **Connect Vercel** so the agent can see its own deployments:
+5. **Configure deployment inspection** (Miguel or the controller, not the agent).
+   Create an expiring Vercel token scoped to the owning team's individual
+   project, and store it server-side as `SELF_VERCEL_TOKEN` in the project's
+   **Production** environment. Enable **Automatically expose System Environment
+   Variables** so `VERCEL_PROJECT_ID` is available at build and runtime. Apply
+   through the existing deployment flow. Never commit token values or provide
+   them in chat. See [token scope and authentication](https://vercel.com/docs/accounts/access-tokens)
+   and [system variables](https://vercel.com/docs/environment-variables/system-environment-variables).
 
-   ```bash
-   pnpm exec eve integration connect vercel vercel vercel --connection-method mcp
-   ```
+   This is **project-scoped, read-only-intent**: project tokens can read and
+   write within the project; these protected tools expose only GET reads, not
+   provider-enforced read-only permission. They use one shared credential for
+   Slack, service and scheduled sessions, with no caller-specific Vercel consent,
+   user principal or OAuth grant. GitHub and channel Connect setup still applies.
+   The protected helper looks up the configured project without a team query,
+   requires its matching ID and team-shaped `accountId`, then uses that owner
+   for subsequent reads. Missing identity or token returns setup instructions.
+
+   For local inspection, an operator must explicitly set `VERCEL_PROJECT_ID`
+   and the same project's `SELF_VERCEL_TOKEN`; tests use synthetic values.
+   Rotation: replace the environment secret with a new token for the same
+   project, apply through the deployment flow, verify reads, then revoke the old
+   token. The agent never creates or installs the token.
 
 6. **Deploy** by pushing to `main` (or `pnpm exec eve deploy`).
 
@@ -117,14 +135,14 @@ Every write goes through six layers:
 3. **Policy in code** (`agent/lib/self/policy.ts`), checked before any GitHub
    call:
    - Writable: `agent/instructions.md`, `agent/{skills,tools,lib,channels,connections,schedules,subagents}/`, `README.md`
-   - Protected: the policy and GitHub client (`agent/lib/self/`), the
+   - Protected: all self helpers including GitHub and Vercel reads (`agent/lib/self/`), the
      `self_*` tools, the live skill loader, the `self-modify` skill, and web
      auth (`agent/channels/eve.ts`)
    - Off-limits: `package.json`, the lockfile, `agent/agent.ts`, memory config,
      `.github/`, and anything else not listed above
    - Up to 10 files and 64 KB per file, no secrets, valid TypeScript syntax and
      JSON, no references to self-connector configuration, GitHub API, or
-     self-auth helpers in new code,
+     `SELF_VERCEL_TOKEN` literals or self-auth helpers in new code,
      skills need a description, instructions cannot be emptied
 
    The code-content checks are tripwires, not a sandbox: agent-written tools
@@ -149,14 +167,13 @@ agent/
   agent.ts                  model
   instructions.md           identity (agent-writable)
   memory.ts                 shared notebook
-  connections/vercel.ts     own deployment via Vercel MCP
   channels/eve.ts           HTTP/TUI channel (protected)
   skills/
     live.ts                 loads skills from main every turn (protected)
     self-modify/SKILL.md    how to change itself (protected)
     add-channel.md          Slack / Teams setup
-  tools/self_*.ts           read, history, commit, revert (protected)
-  lib/self/                 config, GitHub client, policy, approval (protected)
+  tools/self_*.ts           read, history, commit, revert, deployments, build log (protected)
+  lib/self/                 config, GitHub/Vercel reads, policy, approval (protected)
 ```
 
 ## Notes

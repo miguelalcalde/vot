@@ -58,6 +58,7 @@ const SECRET_PATTERNS: readonly [string, RegExp][] = [
  * powers self-modification; otherwise a new tool could bypass this policy.
  */
 const FORBIDDEN_IN_CODE: readonly [string, RegExp][] = [
+  ["deployment inspection credential", /SELF_VERCEL_TOKEN/],
   ["self-connector configuration", /SELF_GITHUB_CONNECTOR/],
   ["the default self connector", /github\/self\b/],
   ["GitHub App installation authorization", /github_app_installation/],

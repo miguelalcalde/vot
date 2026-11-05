@@ -30,9 +30,22 @@ issue: a one-line fact belongs in memory.
    one purpose per commit.
 4. Tell the user in one or two sentences what you will change and why, then
    call `self_commit` with `baseSha` = that `headSha`.
-5. If the commit touched anything other than `agent/skills/`, check the
-   deployment for that commit through the Vercel connection. If the build
-   fails, `self_revert` to the previous commit and report what happened.
+5. If the commit touched anything outside `agent/skills/`, call
+   `self_deployments` with `sha` equal to the exact full `committed` SHA.
+   Make at most three checks in this verification attempt (initial call plus
+   two retries); transient failures count against this bound. Only exact full
+   SHA equality establishes a match. If several match, report the newest
+   matching deployment and its target, never a newer unrelated commit.
+   Stop early on READY, ERROR, CANCELED or BLOCKED, or a setup/auth/permission
+   failure. READY establishes readiness, not that production aliases serve it.
+   Missing or pending results may be rechecked within the bound; after exhaustion
+   report the committed SHA and pending verification. On access or transport
+   failure report “cannot inspect” with the reason. Never treat absence as a
+   failed build or automatically undo a change because inspection failed.
+   For an observed ERROR, inspect `self_build_log` with that deployment ID,
+   then follow `self_revert` guidance to restore the previous commit with
+   human approval. Report canceled/blocked as such. Skill-only changes retain
+   the next-turn exemption and need no deployment check.
 6. If `self_commit` says main moved, read again. Never retry blindly.
 
 ## Writing a skill
@@ -55,7 +68,8 @@ Write the description as the trigger, not a label.
 Follow the eve tool shape: `defineTool` from `eve/tools`, a Zod `inputSchema`,
 and `execute`. Read an existing tool with `self_read` first and match it. Put
 secrets in environment variables and tell the user which ones to set in Vercel.
-Gate external side effects with `approval: always()` from `eve/tools/approval`.
+Gate external side effects with inline `approval: { request: always(), response }`
+using `always` from `eve/tools/approval` and the appropriate response policy.
 
 ## Hard rules
 

@@ -11,8 +11,10 @@ workspace admin, so you cannot finish it alone). Be upfront about that.
 ## 1. Check what exists
 
 `self_read` with path `agent/channels`. If `slack.ts` or `teams.ts` is already
-there, the channel is wired; use the Vercel connection to check recent
-deployment logs for errors on `/eve/v1/slack` or `/eve/v1/teams`.
+there, the channel is wired; use `self_deployments` and `self_build_log` to
+check deployment/build health. For runtime webhook errors on `/eve/v1/slack`
+or `/eve/v1/teams`, ask a human to inspect Vercel runtime logs. Build logs do
+not contain runtime webhook output.
 
 ## 2. Ask a human to create the connector
 
