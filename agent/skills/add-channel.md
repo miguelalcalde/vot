@@ -1,66 +1,45 @@
 ---
-description: Use when someone wants to talk to you from Slack or Microsoft Teams, or asks to add, check, or fix a messaging channel.
+description: Use when someone wants to connect, check, or fix the shipped Slack channel.
 ---
 
-# Adding a channel
+# Connect the shipped Slack channel
 
-A channel needs two things: a channel file in your repo, and a connector a
-human authorizes (installing a Slack app or consenting to a Teams bot needs a
-workspace admin, so you cannot finish it alone). Be upfront about that.
+`agent/channels/slack.ts` already uses connector `slack/vot`. Connect that
+installation; do not re-scaffold or replace the channel file. A human must
+install the Slack app, with workspace administrator consent where needed.
 
-## 1. Check what exists
+## 1. Check the existing wiring
 
-`self_read` with path `agent/channels`. If `slack.ts` or `teams.ts` is already
-there, the channel is wired; use `self_deployments` and `self_build_log` to
-check deployment/build health. For runtime webhook errors on `/eve/v1/slack`
-or `/eve/v1/teams`, ask a human to inspect Vercel runtime logs. Build logs do
-not contain runtime webhook output.
+Use `self_read` on `agent/channels/slack.ts` to confirm the shipped UID.
+Use `self_deployments` and `self_build_log` for deployment/build health, not
+runtime logs. For webhook errors on `/eve/v1/slack`, ask a human to inspect
+Vercel runtime logs. Build logs do not contain runtime webhook output.
+A channel file or successful build does not verify installation or ingress;
+an arriving conversation establishes ingress for that conversation only.
 
-## 2. Ask a human to create the connector
+## 2. Connect Slack in the dashboard
 
-Ask the user to run this from a clone of your repo, signed in to Vercel:
+Ask a human to:
 
-| Channel | Command                         | Creates                                  |
-| ------- | ------------------------------- | ---------------------------------------- |
-| Slack   | `npx eve add channel/slack`     | Slack connector, trigger, `slack.ts`     |
-| Teams   | `npx eve add channel/teams`     | Azure bot connector, trigger, `teams.ts` |
+1. Open [team Connect](https://vercel.com/d?to=/%5Bteam%5D/~/connect&title=Go+to+Connect)
+   for the owning Vercel team. Create/check Slack connector `vot` (`slack/vot`)
+   and install it in the intended workspace. If that UID belongs to another
+   installation, stop and select the intended dedicated installation;
+   never silently rename it or attach an unrelated one.
+2. Follow the [dashboard trigger procedure](https://vercel.com/docs/connect/concepts/triggers#use-the-dashboard):
+   add a trigger destination for this project, Production, at `/eve/v1/slack`.
+   Review connector project/environment access.
+3. Invite the bot where needed, including private channels.
 
-The guided setup writes the channel file locally. Ask them to commit and push
-it to `main`, or to give you the connector ID it printed (like `slack/my-agent`)
-so you can commit the file yourself.
+## 3. Preserve access and approvals
 
-## 3. Commit the channel file (if they gave you the connector ID)
+One-to-one DMs need no mention. Everywhere else, require an explicit bot mention,
+including public and private channels, group DMs and their threads. Only human
+authors are admitted; do not loosen these rules to troubleshoot setup.
 
-Slack, `agent/channels/slack.ts`:
-
-```ts
-import { connectSlackCredentials } from "@vercel/connect/eve";
-import { slackChannel } from "eve/channels/slack";
-
-export default slackChannel({
-  credentials: connectSlackCredentials("<connector-id>"),
-});
-```
-
-Teams without Connect, `agent/channels/teams.ts` (needs `MICROSOFT_APP_ID`,
-`MICROSOFT_APP_PASSWORD`, and optionally `MICROSOFT_TENANT_ID` set in Vercel):
-
-```ts
-import { teamsChannel } from "eve/channels/teams";
-
-export default teamsChannel();
-```
-
-Follow the self-modify skill to commit, then confirm the deployment succeeded.
-
-## 4. Slack access and approvals
-
-In Slack, public and private channel messages require an explicit bot mention;
-one-to-one DMs do not. The app must be invited to each channel. Set
-`SELF_APPROVERS` in Vercel to the principal IDs allowed to approve your
-changes (Slack looks like `slack:<team-id>:<user-id>`). For Miguel as sole
-approver, use exactly his confirmed Slack team and user IDs. Approval prompts
-stay in the requesting thread.
-
-In Teams, anyone in the approval thread can click Approve unless the project
-configures its own approver restriction.
+Set `SELF_APPROVERS` in the project's Production environment settings to the
+allowed principal IDs (`slack:<team-id>:<user-id>`), then redeploy. For Miguel
+as sole approver, use exactly his confirmed Slack team and user IDs. If unset,
+any reachable principal can approve a write; set allowed principals before
+shared use. Every write still requires human approval. Approval prompts
+stay in the requesting thread. Never ask for secrets in chat.

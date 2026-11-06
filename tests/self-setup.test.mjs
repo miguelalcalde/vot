@@ -94,6 +94,80 @@ test("session resolver is runtime, system-only, replayable and performs no fetch
   } finally { globalThis.fetch = oldFetch; }
 });
 
+test("every arriving conversation establishes only its own ingress, including absent channel kind", () => {
+  let networkCalls = 0;
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = () => { networkCalls++; throw Error("network forbidden"); };
+  try {
+    withEnv({ VERCEL: "1" }, () => {
+      for (const kind of ["http", "eve", "service", "discord", undefined, "", "channel-secret-sentinel", "slack"]) {
+        const ctx = {
+          channel: kind === undefined ? {} : { kind },
+          getToken() { throw Error("token forbidden"); },
+          get session() { throw Error("session access forbidden"); },
+        };
+        const first = resolve({}, ctx);
+        assert.equal(first.role, "system");
+        assert.equal(first.content, renderSetup(process.env, kind));
+        assert.deepEqual(resolve({}, ctx), first, "replay remains stateless");
+        assert.match(first.content, /This arriving(?: Slack)? conversation establishes ingress for this conversation only/, String(kind));
+        assert.match(first.content, /other workspaces\/channels remain unverified/);
+        assert.match(first.content, /[Dd]eployment alone provides no web chat/);
+        assert.doesNotMatch(first.content, /Conversation readiness requires working ingress|[Mm]issing[^\n]*ingress|channel-secret-sentinel/);
+        assert.match(first.content, /Every write still requires human approval/);
+        assert.match(first.content, /Setup status never authorizes a write/);
+      }
+    });
+    assert.equal(networkCalls, 0);
+  } finally { globalThis.fetch = oldFetch; }
+});
+
+test("authored memory guidance is conditional, explains Blob setup and preserves privacy and approval", async () => {
+  const text = await readFile(new URL("../agent/instructions.md", import.meta.url), "utf8");
+  const memoryGuidance = text.split("- **Memory**")[1].split("- **Skills**")[0].replace(/\s+/g, " ");
+  assert.match(memoryGuidance, /when enabled/);
+  assert.match(memoryGuidance, /recall, save .* and remove operations only when their tools are available/);
+  assert.match(memoryGuidance, /memory__save_memory/);
+  assert.match(memoryGuidance, /disabled or its tools are unavailable/);
+  assert.match(memoryGuidance, /cross-session memory is unavailable; never claim persistence/);
+  assert.match(memoryGuidance, /Storage.*private Blob store.*redeploy/s);
+  assert.match(memoryGuidance, /Never store secrets or private personal data/);
+  assert.match(text, /human approves/);
+  assert.match(text, /some files are\s+protected/);
+  assert.match(text, /never try to get around them/);
+  assert.match(text, /never ask for a token in chat/);
+  assert.equal(setupStatus({ VERCEL: "1" }).memory, "disabled");
+  assert.equal(setupStatus({ VERCEL: "1", BLOB_STORE_ID: "binding-secret-sentinel" }).memory, "configured-unverified");
+  assert.match(renderSetup({ VERCEL: "1" }), /Cross-session memory is off/);
+  assert.doesNotMatch(renderSetup({ VERCEL: "1", BLOB_STORE_ID: "binding-secret-sentinel" }), /binding-secret-sentinel|Cross-session memory is off/);
+});
+
+test("channel skill connects shipped Slack without scaffolding or weakening admission and approvals", async () => {
+  const source = await readFile(new URL("../agent/skills/add-channel.md", import.meta.url), "utf8");
+  assert.match(source, /^---\ndescription: Use when .*Slack.*\n---/);
+  const text = source.replace(/\s+/g, " ");
+  assert.match(text, /agent\/channels\/slack\.ts/);
+  assert.match(text, /slack\/vot/);
+  assert.match(text, /https:\/\/vercel\.com\/d\?to=/);
+  assert.match(text, /Production/);
+  assert.match(text, /\/eve\/v1\/slack/);
+  assert.match(text, /[Ii]nvite.*private channels/);
+  assert.match(text, /[Oo]ne-to-one DMs (?:need no|do not require a) mention/);
+  assert.match(text, /[Ee]verywhere else.*bot mention/);
+  assert.match(text, /public.*private.*group DMs/);
+  assert.match(text, /Only human authors are admitted/);
+  assert.match(text, /SELF_APPROVERS/);
+  assert.match(text, /slack:<team-id>:<user-id>/);
+  assert.match(text, /any reachable principal can approve a write/);
+  assert.match(text, /Every write still requires human approval/);
+  assert.match(text, /Approval prompts\s+stay in the requesting thread/);
+  assert.match(text, /self_deployments.*self_build_log/);
+  assert.match(text, /Build logs do\s+not contain runtime webhook output/);
+  assert.match(text, /runtime logs/);
+  assert.match(text, /never silently rename.*or attach an unrelated one/);
+  assert.doesNotMatch(text, /eve add|channel\/teams|teamsChannel|slackChannel\(|```ts|MICROSOFT_APP|Teams/);
+});
+
 test("setup helper and resolver have no network, provider, persistence or logging dependencies", async () => {
   const helper = await readFile(new URL("../agent/lib/self/setup.ts", import.meta.url), "utf8");
   const resolver = await readFile(new URL("../agent/instructions/setup.ts", import.meta.url), "utf8");
