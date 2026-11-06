@@ -212,6 +212,19 @@ dynamic memory and skills (no deploy needed), and Slack and Teams channels.
 - Gotcha: `eve info` lists only static instructions; dynamic ones under
   `agent/instructions/*.ts` show up in the compiled `.output/server`.
 
+- 2026-11-06 run `vot-run-20261106-i`: #23 implemented by fx subagent
+  `fix23` (Miguel explicitly requested a subagent), independently QA'd by a
+  separate fx task, merged in PR #24 (`ceec981`), and closed after production
+  smoke. Focused 10/10; full 111/111 on Node24/26; tsc/build exit 0. Ingress
+  warning fixed and Blob recall preserved. Worktree removed.
+- 2026-11-06: Miguel configured Production `SELF_VERCEL_TOKEN` (for #5,
+  not #4). Actual service-session self_deployments and self_build_log both
+  succeeded, matching the exact #24 merge SHA and provider metadata/logs.
+  Evidence: https://github.com/miguelalcalde/vot/issues/5#issuecomment-6683693997 .
+  #5 remains open for Slack/scheduled caller checks and the next legitimate
+  human-approved non-skill self-change correlation; do not manufacture a
+  self-write. #4 still requires Miguel's Slack approval and pre-deploy skill test.
+
 ## Open questions
 
 - None open right now. See the GitHub issues for story-level questions.
