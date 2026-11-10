@@ -16,12 +16,12 @@ import { defineDynamic, defineSkill, type SkillDefinition } from "eve/skills";
 import { resolveSelfRepo } from "../lib/self/config";
 import { selfAuthRepo } from "../lib/self/auth";
 import { getBlobText, getHeadSha, getTree } from "../lib/self/github";
-import { parseFrontmatter } from "../lib/self/policy";
+import { checkPath, parseFrontmatter } from "../lib/self/policy";
 
 const ROOT = "agent/skills/";
 const SKILL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const MAX_SIBLING_BYTES = 64 * 1024;
-const TEXT_FILE = /\.(md|txt|json|ya?ml|csv|sh|py|ts|js)$/;
+const TEXT_FILE = /\.md$/;
 
 let cached: { repo: string; sha: string; skills: Record<string, SkillDefinition> } | null = null;
 const blobs = new Map<string, string>();
@@ -81,14 +81,26 @@ export async function loadLiveSkills(deps: {
   };
 
   const skills: Record<string, SkillDefinition> = {};
+  const candidates = new Map<string, Set<string>>();
+  const invalidPackages = new Set<string>();
+  for (const entry of entries) {
+    const rest = entry.path.slice(ROOT.length), parts = rest.split("/");
+    const name = parts.length === 1 && rest.endsWith(".md") ? rest.slice(0, -3) : parts[0]!;
+    if (!SKILL_NAME.test(name)) continue;
+    if (!checkPath(entry.path).ok) { if (parts.length > 1) invalidPackages.add(name); continue; }
+    const shapes = candidates.get(name) ?? new Set<string>();
+    shapes.add(parts.length === 1 ? "flat" : "package");
+    candidates.set(name, shapes);
+  }
   for (const entry of entries) {
     const rest = entry.path.slice(ROOT.length);
     const parts = rest.split("/");
 
     if (parts.length === 1 && rest.endsWith(".md")) {
       const name = rest.slice(0, -3);
-      if (!SKILL_NAME.test(name)) continue;
-      const { description, body } = parseFrontmatter(await text(entry.sha));
+      if (!SKILL_NAME.test(name) || candidates.get(name)?.size !== 1 || invalidPackages.has(name) || !checkPath(entry.path).ok) continue;
+      const source = await text(entry.sha);
+      const { description, body } = parseFrontmatter(source);
       const fallback = body.split("\n").find((l) => l.trim() && !l.startsWith("```"));
       skills[name] = defineSkill({
         description: description ?? fallback?.replace(/^[#>*\-\s]+/, "").trim() ?? `Instructions for ${name}.`,
@@ -99,13 +111,13 @@ export async function loadLiveSkills(deps: {
 
     if (parts.length === 2 && parts[1] === "SKILL.md") {
       const name = parts[0]!;
-      if (!SKILL_NAME.test(name)) continue;
+      if (!SKILL_NAME.test(name) || candidates.get(name)?.size !== 1 || invalidPackages.has(name) || !checkPath(entry.path).ok) continue;
       const { description, body } = parseFrontmatter(await text(entry.sha));
-      if (!description) continue;
+      if (!description?.trim()) continue;
       const files: Record<string, string> = {};
       for (const sibling of entries) {
         const rel = sibling.path.slice(`${ROOT}${name}/`.length);
-        if (!sibling.path.startsWith(`${ROOT}${name}/`) || rel === "SKILL.md") continue;
+        if (!sibling.path.startsWith(`${ROOT}${name}/`) || rel === "SKILL.md" || !checkPath(sibling.path).ok) continue;
         if (!TEXT_FILE.test(rel) || (sibling.size ?? 0) > MAX_SIBLING_BYTES) continue;
         files[rel] = await text(sibling.sha);
       }

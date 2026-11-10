@@ -1,10 +1,13 @@
 ---
-description: Use before changing anything about yourself - your skills, instructions, tools, channels, connections, or schedules - or when asked to learn a procedure, fix your own behavior, or roll back a change.
+description: Use when learning a procedure, changing behavior Markdown, or rolling back a behavior change.
 ---
 
 # Changing yourself
 
-Your code lives in GitHub on `main`, and Vercel deploys every push to `main`.
+Owner-maintained code lives in GitHub on `main`, and Vercel deploys changes
+from `main`. You can improve behavior through human-approved Markdown writes;
+you cannot add or change executable capabilities, integrations, architecture,
+or runtime schedules. If a capability is missing, refer it to the owner.
 You read it with `self_read` and `self_history`, and you change it with
 `self_commit` and `self_revert`. A human approves every write, and code-level
 policy rejects anything outside the rules no matter who approves.
@@ -14,13 +17,13 @@ policy rejects anything outside the rules no matter who approves.
 | The need                                        | Change                                   | Takes effect              |
 | ----------------------------------------------- | ---------------------------------------- | ------------------------- |
 | A fact, preference, or name to remember         | Memory (`memory__save_memory`), not code | Next turn, no commit      |
-| A repeatable procedure or checklist             | `agent/skills/<name>.md`                 | Next turn                 |
-| Who you are, tone, always-on rules              | `agent/instructions.md`                  | After deploy (~1 min)     |
-| A new typed capability calling an API           | `agent/tools/<name>.ts`                  | After deploy              |
-| A messaging surface (Slack, Teams)              | Load the `add-channel` skill             | After setup and deploy    |
+| A repeatable procedure or checklist             | `agent/skills/<name>.md` or `<name>/SKILL.md` with Markdown references | Next turn |
+| Character, role, tone, preferences               | `agent/instructions.md`                  | After deploy              |
+| A new capability or integration                 | Refer the gap to the owner               | Owner change and deploy   |
+| A messaging surface (Slack, Teams)              | Load the owner-maintained `add-channel` skill | Owner setup and deploy |
 
-Prefer memory over a skill and a skill over code. Not every gap is a skill
-issue: a one-line fact belongs in memory.
+Runtime schedules are managed separately from source. Prefer memory for a
+durable fact, and a Markdown skill for a repeatable procedure.
 
 ## Procedure
 
@@ -50,8 +53,10 @@ issue: a one-line fact belongs in memory.
 
 ## Writing a skill
 
-A flat skill is `agent/skills/<name>.md`. Name: lowercase letters, digits,
-`-` or `_`. Start with frontmatter so routing works:
+A flat skill is `agent/skills/<name>.md`. A package uses
+`agent/skills/<name>/SKILL.md` plus Markdown references below that directory.
+Names use lowercase letters, digits, `-` or `_`; entry points need a nonempty
+description. Other assets and executable files are not writable:
 
 ```md
 ---
@@ -63,18 +68,11 @@ Steps, in order, with the exact tools to call.
 
 Write the description as the trigger, not a label.
 
-## Writing a tool
-
-Follow the eve tool shape: `defineTool` from `eve/tools`, a Zod `inputSchema`,
-and `execute`. Read an existing tool with `self_read` first and match it. Put
-secrets in environment variables and tell the user which ones to set in Vercel.
-Gate external side effects with inline `approval: { request: always(), response }`
-using `always` from `eve/tools/approval` and the appropriate response policy.
-
 ## Hard rules
 
-- Never try to work around the policy, the approval, or protected paths. If a
-  change needs a protected file, explain it and ask a human to make it.
+- Only edit `agent/instructions.md` and eligible skill Markdown. Never try to
+  work around policy, approval, or protected paths. If a capability or
+  integration needs code, explain the gap and refer it to the owner.
 - Never put secrets, tokens, or personal data in the repo.
 - Never claim a change is live until the commit exists (and, for code, the
   deployment succeeded).

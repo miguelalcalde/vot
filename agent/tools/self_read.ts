@@ -7,7 +7,7 @@ import { checkPath } from "../lib/self/policy";
 
 export default defineTool({
   description:
-    `Read your own source code from GitHub (${SELF_BRANCH} branch). Pass a file path to get its content, ` +
+    `Read your own repository from GitHub (${SELF_BRANCH} branch). Pass a file path to get its content, ` +
     "or a directory path (or nothing) to list files under it. Always returns headSha: pass it as baseSha " +
     "to self_commit so you never overwrite a change you did not see.",
   inputSchema: z.object({

@@ -175,15 +175,16 @@ test("AC5: exact credential echo redacted in projected provider fields and log t
   }, [project, detail, [{ text: `echo ${TOKEN}` }]]);
 });
 
-test("AC6: all new paths reject add/edit/delete; literal credential forms rejected in ts/mts/tsx", () => {
+test("AC6: all implementation paths reject add/edit/delete; behavior writes still reject secrets", () => {
   for (const path of ["agent/lib/self/vercel.ts", "agent/tools/self_deployments.ts", "agent/tools/self_build_log.ts"]) {
     assert.equal(checkPath(path).ok, false);
     for (const change of [{ path, content: "export const x = 1;" }, { path, delete: true }]) assert.match(checkChanges([change]).join("\n"), /protected/);
   }
   for (const ext of ["ts", "mts", "tsx"]) for (const content of ["process.env.SELF_VERCEL_TOKEN;", "process.env['SELF_VERCEL_TOKEN'];", "const { SELF_VERCEL_TOKEN } = process.env;", "const key = 'SELF_VERCEL_TOKEN';"]) {
-    assert.match(checkChanges([{ path: `agent/tools/ordinary.${ext}`, content }]).join("\n"), /deployment inspection credential/);
+    assert.ok(checkChanges([{ path: `agent/tools/ordinary.${ext}`, content }]).length > 0);
   }
-  assert.deepEqual(checkChanges([{ path: "agent/tools/ordinary.ts", content: "export const x = 1;" }]), []);
+  assert.ok(checkChanges([{ path: "agent/tools/ordinary.ts", content: "export const x = 1;" }]).length > 0);
+  assert.ok(checkChanges([{ path: "agent/skills/ordinary.md", content: "synthetic vcp_ABCDEFGHIJKLMNOPQRST" }]).some((problem) => problem.includes("Vercel token")));
 });
 
 test("AC7 source guidance retains exact SHA, three checks, honest pending/cannot-inspect and approved ERROR rollback", async () => {

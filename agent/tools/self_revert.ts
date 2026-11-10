@@ -4,16 +4,14 @@ import { z } from "zod";
 import { always } from "eve/tools/approval";
 import { selfWriteResponse, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
-import { commitToMain, compare, getHeadSha, getTree, type TreeChange } from "../lib/self/github";
-import { checkPath } from "../lib/self/policy";
+import { commitToMain, compare, getBlobText, getHeadSha, getTree, type TreeChange } from "../lib/self/github";
+import { checkChangeSet, checkPath, type FileChange } from "../lib/self/policy";
 
 const MAX_FILES = 300;
 
 export default defineTool({
   description:
-    `Roll your writable files back to how they were at an earlier commit on ${SELF_BRANCH}, as a new commit ` +
-    "(history is never rewritten). Protected files are left alone. A human must approve. Use this when a change " +
-    "you made broke a deploy or a behavior. Find targetSha with self_history.",
+    `Roll eligible behavior Markdown back to an earlier commit on ${SELF_BRANCH}, as a new commit (history is never rewritten). Current content policy is rechecked; newly nonwritable architecture paths are skipped, invalid Markdown restores are rejected atomically. A human must approve. Use this when a behavior change broke something; find targetSha with self_history.`,
   inputSchema: z.object({
     targetSha: z.string().regex(/^[0-9a-f]{40}$/),
     baseSha: z.string().regex(/^[0-9a-f]{40}$/).describe("Current headSha from self_history."),
@@ -40,21 +38,34 @@ export default defineTool({
 
     const changes: TreeChange[] = [];
     const skipped: string[] = [];
-    const restore = (path: string) => {
+    const planned = new Map<string, TreeChange>();
+    const restore = async (path: string) => {
       if (!checkPath(path).ok) return skipped.push(path);
       const sha = targetTree.get(path);
-      changes.push(sha ? { path, blobSha: sha } : { path, delete: true });
+      planned.set(path, sha ? { path, blobSha: sha } : { path, delete: true });
     };
     for (const file of diff.files) {
-      restore(file.filename);
-      if (file.previous_filename) restore(file.previous_filename);
+      await restore(file.filename);
+      if (file.previous_filename) await restore(file.previous_filename);
     }
+    changes.push(...planned.values());
     if (changes.length === 0) throw new Error("Nothing writable changed since that commit.");
+
+    const currentTree = await getTree(authed, head);
+    const currentPaths = currentTree.filter((e) => e.type === "blob").map((e) => e.path);
+    const validationChanges: FileChange[] = [];
+    for (const change of changes) {
+      if ("delete" in change) validationChanges.push(change);
+      else if ("blobSha" in change) validationChanges.push({ path: change.path, content: await getBlobText(authed, change.blobSha) });
+      else validationChanges.push(change);
+    }
+    const problems = checkChangeSet(validationChanges, currentPaths);
+    if (problems.length) throw new Error(`Rollback rejected by current self-modification policy:\n- ${problems.join("\n- ")}`);
 
     const message =
       `agent: roll back to ${targetSha.slice(0, 7)}\n\n${reason.trim()}\n\n` +
       `Eve-Session: ${ctx.session.id}\nEve-Requested-By: ${requester(ctx.session)}\n`;
     const commit = await commitToMain(authed, head, changes, message);
-    return { committed: commit.sha, url: commit.url, restored: changes.map((c) => c.path), skippedProtected: skipped };
+    return { committed: commit.sha, url: commit.url, restored: changes.map((c) => c.path), skippedNonwritable: [...new Set(skipped)] };
   },
 });

@@ -196,17 +196,34 @@ test("AC5: legacy credential reads are absent, guard paths remain aligned, and p
   assert.ok(PROTECTED.includes("agent/skills/live.ts"));
   assert.ok(PROTECTED.includes("agent/skills/self-modify/"));
   assert.ok(PROTECTED.includes("agent/channels/eve.ts"));
-  assert.match(policy, /SELF_GITHUB_CONNECTOR/);
+  assert.doesNotMatch(policy, /WRITABLE = \[[^\]]*agent\/(tools|lib|channels|connections|schedules|subagents)/);
   assert.equal(checkChanges([{ path: "agent/lib/self/auth.ts", content: "human" }]).length > 0, true);
   assert.equal(checkChanges([{ path: "agent/instructions.md", content: "A permitted instruction change that keeps the identity and detailed response guidance intact." }]).length, 0);
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "process.env.SELF_GITHUB_CONNECTOR;" }]).some((p) => p.includes("self-connector configuration")));
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "import x from '../lib/self/policy';" }]).some((p) => p.includes("self-modification internals")));
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "const connector = 'github/self';" }]).some((p) => p.includes("default self connector")));
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "const detail = 'github_app_installation';" }]).some((p) => p.includes("GitHub App installation authorization")));
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "fetch('https://api.github.com');" }]).some((p) => p.includes("GitHub API")));
-  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "const key = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';" }]).some((p) => p.includes("GitHub token")));
-  assert.deepEqual(checkChanges([{ path: "agent/channels/slack.ts", content: 'import { connectSlackCredentials } from "@vercel/connect/eve";\nconst auth = connectSlackCredentials({ connector: "slack/my-agent" });' }]), []);
-  assert.ok(WRITABLE.includes("README.md"));
+  assert.ok(PROTECTED.includes("agent/instructions/operating-rules.md"));
+  assert.ok(checkChanges([{ path: "agent/tools/new.ts", content: "export const tool = true;" }]).length > 0);
+  assert.ok(checkChanges([{ path: "agent/skills/example/script.ts", content: "export const x = 1;" }]).length > 0);
+  assert.ok(checkChanges([{ path: "agent/skills/example.md", content: "synthetic ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890" }]).some((p) => p.includes("GitHub token")));
+  assert.equal(checkChanges([{ path: "agent/skills/example.md", content: "---\ndescription: Use this example skill.\n---\nBody" }]).length, 0);
+  assert.ok(WRITABLE.includes("agent/skills/"));
+});
+
+test("self_history exposes Markdown skill grammar and reserved identities with existing policy fields", async () => {
+  const priorRepo = process.env.SELF_REPO;
+  process.env.SELF_REPO = "org/agent";
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([]);
+  try {
+    const history = await historyTool.execute({ limit: 5 }, { getToken: async () => ({ token: "test-bearer" }), requireAuth() {}, session: { id: "test", auth: {} } });
+    assert.deepEqual(history.policy.writable, WRITABLE);
+    assert.deepEqual(history.policy.protected, PROTECTED);
+    assert.deepEqual(history.policy.skillLayouts, ["agent/skills/<name>.md", "agent/skills/<name>/SKILL.md", "agent/skills/<name>/**/*.md"]);
+    assert.deepEqual(history.policy.reservedSkills, ["self-modify", "add-channel", "live"]);
+    assert.equal(history.policy.skillEntryDescriptionRequired, true);
+    assert.deepEqual(history.policy.limits, { maxFiles: 10, maxFileBytes: 65_536, maxTotalBytes: 262_144, maxMessageChars: 500 });
+  } finally {
+    globalThis.fetch = original;
+    priorRepo === undefined ? delete process.env.SELF_REPO : process.env.SELF_REPO = priorRepo;
+  }
 });
 
 test("AC6: invalid commits make no auth/network call; stale base rejects; commits stay fast-forward only", async () => {
@@ -218,6 +235,8 @@ test("AC6: invalid commits make no auth/network call; stale base rejects; commit
   const ctx = { getToken: async () => { tokenCalls++; return { token: "test-bearer" }; }, requireAuth() {}, session: { id: "test", auth: {} } };
   try {
     await assert.rejects(commitTool.execute({ baseSha: sha, message: "invalid protected write", files: [{ path: "agent/lib/self/auth.ts", content: "bad" }] }, ctx), /Rejected by self-modification policy/);
+    await assert.rejects(commitTool.execute({ baseSha: sha, message: "mixed behavior and code write", files: [{ path: "agent/instructions.md", content: "This is a sufficiently long character description for a valid instructions update." }, { path: "agent/tools/backdoor.ts", content: "export const bad = true;" }] }, ctx), /Rejected by self-modification policy/);
+    await assert.rejects(commitTool.execute({ baseSha: sha, message: "delete mutable instructions", files: [{ path: "agent/instructions.md", delete: true }] }, ctx), /Rejected by self-modification policy/);
     assert.equal(tokenCalls, 0);
     assert.equal(githubCalls, 0);
 
@@ -237,15 +256,18 @@ test("AC6: invalid commits make no auth/network call; stale base rejects; commit
         const path = String(url);
         revertRequests.push({ path, init });
         if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha } });
-        if (path.includes("/compare/")) return Response.json({ status: "ahead", files: [{ filename: "agent/lib/self/auth.ts" }, { filename: "agent/instructions.md" }] });
-        if (path.endsWith("/git/trees/tree-target?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "blob-safe" }] });
-        if (path.includes("/git/commits/")) return Response.json({ tree: { sha: "tree-target" } });
+        if (path.includes("/compare/")) return Response.json({ status: "ahead", files: [{ filename: "agent/lib/self/auth.ts" }, { filename: "agent/instructions.md", previous_filename: "agent/skills/example.md" }, { filename: "agent/skills/example.md", previous_filename: "agent/skills/example.md" }] });
+        if (path.endsWith("/git/trees/tree-target?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "blob-safe" }, { type: "blob", path: "agent/skills/example.md", sha: "blob-skill" }] });
+      if (path.includes("/git/commits/")) return Response.json({ tree: { sha: "tree-target" } });
+      if (path.endsWith("/git/blobs/blob-safe")) return Response.json({ encoding: "base64", content: Buffer.from("This preserves a sufficiently detailed character role, preferences, and response style for the assistant.").toString("base64") });
+        if (path.endsWith("/git/blobs/blob-skill")) return Response.json({ encoding: "base64", content: Buffer.from("---\ndescription: Use this example behavior procedure.\n---\nSteps.").toString("base64") });
         if (path.endsWith("/git/trees")) return Response.json({ sha: "rollback-tree" });
         if (path.endsWith("/git/commits")) return Response.json({ sha: "rollback-commit", html_url: "https://example.test/rollback" });
         return Response.json({});
       };
       const reverted = await revertTool.execute({ targetSha: "d".repeat(40), baseSha: sha, reason: "Restore the earlier good behavior" }, ctx);
-      assert.deepEqual(reverted.skippedProtected, ["agent/lib/self/auth.ts"]);
+      assert.deepEqual(reverted.skippedNonwritable, ["agent/lib/self/auth.ts"]);
+      assert.deepEqual(reverted.restored, ["agent/instructions.md", "agent/skills/example.md"], "rename old/new overlap is restored once per path");
       const revertPatch = revertRequests.find((r) => r.init.method === "PATCH");
       assert.deepEqual(JSON.parse(revertPatch.init.body), { sha: "rollback-commit", force: false });
     } finally { globalThis.fetch = originalFetch; }
@@ -274,6 +296,47 @@ test("AC6: invalid commits make no auth/network call; stale base rejects; commit
   }
 });
 
+test("self_commit validates reference-only edits against the current tree and rejects actual orphans before writes", async () => {
+  const priorRepo = process.env.SELF_REPO;
+  process.env.SELF_REPO = "org/agent";
+  const head = "e".repeat(40), writeCalls = [];
+  let tokenCalls = 0;
+  const ctx = { getToken: async () => { tokenCalls++; return { token: "test-bearer" }; }, requireAuth() {}, session: { id: "test", auth: {} } };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const path = String(url);
+    if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: head } });
+    if (path.endsWith(`/git/commits/${head}`) && init.method !== "POST") return Response.json({ tree: { sha: "tree-current" } });
+    if (path.endsWith("/git/trees/tree-current?recursive=1")) return Response.json({ truncated: false, tree: [
+      { type: "blob", path: "agent/instructions.md", sha: "instructions" },
+      { type: "blob", path: "agent/skills/example/SKILL.md", sha: "skill" },
+      { type: "blob", path: "agent/skills/example/references/guide.md", sha: "guide" },
+    ] });
+    if (init.method === "POST" || init.method === "PATCH") writeCalls.push({ path, method: init.method });
+    if (path.endsWith("/git/trees")) return Response.json({ sha: "new-tree" });
+    if (path.endsWith("/git/commits") && init.method === "POST") return Response.json({ sha: "new-commit", html_url: "https://example.test/commit" });
+    return Response.json({ ok: true });
+  };
+  try {
+    const update = { path: "agent/skills/example/references/guide.md", content: "Updated reference content." };
+    const committed = await commitTool.execute({ baseSha: head, message: "Update existing skill reference", files: [update] }, ctx);
+    assert.equal(committed.committed, "new-commit");
+    assert.deepEqual(writeCalls.map((call) => call.method), ["POST", "POST", "PATCH"]);
+
+    writeCalls.length = 0;
+    const beforeInvalidPath = tokenCalls;
+    await assert.rejects(commitTool.execute({ baseSha: head, message: "Invalid executable path", files: [{ path: "agent/skills/example/run.ts", content: "bad" }] }, ctx), /Rejected by self-modification policy/);
+    assert.equal(tokenCalls, beforeInvalidPath, "invalid path preflight stops before auth");
+    assert.deepEqual(writeCalls, []);
+
+    await assert.rejects(commitTool.execute({ baseSha: head, message: "Create orphan reference", files: [{ path: "agent/skills/missing/references/guide.md", content: "Orphan" }] }, ctx), /no SKILL.md entry point/);
+    assert.deepEqual(writeCalls, [], "a genuine orphan is rejected before any GitHub write");
+  } finally {
+    globalThis.fetch = original;
+    priorRepo === undefined ? delete process.env.SELF_REPO : process.env.SELF_REPO = priorRepo;
+  }
+});
+
 test("AC4 regression: a timed-out live load never publishes, even when the injected clock lags the timer", async () => {
   resetLiveSkillCacheForTests();
   const repo = { owner: "org", name: "agent" };
@@ -297,4 +360,51 @@ test("AC4 regression: a timed-out live load never publishes, even when the injec
   assert.equal(blobCalls, 2, "the late blob must not have been published to the blob cache");
   assert.equal(next?.late?.markdown, "fresh");
   resetLiveSkillCacheForTests();
+});
+
+test("AC2/5: live loader excludes reserved identities, collisions, and packages containing executable assets", async () => {
+  resetLiveSkillCacheForTests();
+  const rows = [
+    ["agent/skills/good/SKILL.md", "g1"], ["agent/skills/good/references/guide.md", "g2"],
+    ["agent/skills/bad/SKILL.md", "b1"], ["agent/skills/bad/scripts/run.ts", "b2"],
+    ["agent/skills/collision.md", "c1"], ["agent/skills/collision/SKILL.md", "c2"],
+    ["agent/skills/add-channel.md", "o1"],
+  ].map(([path, sha]) => ({ type: "blob", path, sha, size: 20 }));
+  const content = new Map([
+    ["g1", "---\ndescription: Use this good package.\n---\nBody"], ["g2", "A reference"],
+    ["b1", "---\ndescription: Bad package.\n---\nBody"], ["b2", "executable"],
+    ["c1", "---\ndescription: Flat collision.\n---\nBody"], ["c2", "---\ndescription: Package collision.\n---\nBody"], ["o1", "Owner skill"],
+  ]);
+  const loaded = await loadLiveSkills({ repo: REPO, getAuthRepo: async (r) => authRepo(r), head: async () => "safe-head", tree: async () => rows, blob: async (_auth, sha) => content.get(sha) });
+  assert.ok(loaded.good);
+  assert.deepEqual(Object.keys(loaded).sort(), ["good"]);
+  resetLiveSkillCacheForTests();
+});
+
+test("AC4: rollback validates historical behavior blobs before any GitHub write", async () => {
+  const prior = process.env.SELF_REPO;
+  process.env.SELF_REPO = "org/agent";
+  const head = "a".repeat(40), target = "b".repeat(40);
+  const ctx = { getToken: async () => ({ token: "test-bearer" }), requireAuth() {}, session: { id: "test", auth: {} } };
+  const writes = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const path = String(url);
+    if (init.method === "POST" || init.method === "PATCH") writes.push(path);
+    if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: head } });
+    if (path.includes("/compare/")) return Response.json({ status: "ahead", files: [{ filename: "agent/tools/once-allowed.ts" }, { filename: "agent/instructions.md" }] });
+    if (path.endsWith(`/git/commits/${target}`)) return Response.json({ tree: { sha: "target-tree" } });
+    if (path.endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: "current-tree" } });
+    if (path.endsWith("/git/trees/target-tree?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "historical-secret" }] });
+    if (path.endsWith("/git/trees/current-tree?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "current-instructions" }] });
+    if (path.endsWith("/git/blobs/historical-secret")) return Response.json({ encoding: "base64", content: Buffer.from("synthetic ghp_ABCDEFGHIJKLMNOPQRST").toString("base64") });
+    return Response.json({});
+  };
+  try {
+    await assert.rejects(revertTool.execute({ targetSha: target, baseSha: head, reason: "Restore a behavior after review" }, ctx), /Rollback rejected by current self-modification policy.*GitHub token/s);
+    assert.deepEqual(writes, []);
+  } finally {
+    globalThis.fetch = original;
+    prior === undefined ? delete process.env.SELF_REPO : process.env.SELF_REPO = prior;
+  }
 });
