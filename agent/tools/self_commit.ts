@@ -4,8 +4,8 @@ import { z } from "zod";
 import { always } from "eve/tools/approval";
 import { selfWriteResponse, requester } from "../lib/self/approval";
 import { SELF_BRANCH, requireSelfRepo } from "../lib/self/config";
-import { commitToMain, getHeadSha } from "../lib/self/github";
-import { LIMITS, checkChanges, type FileChange } from "../lib/self/policy";
+import { commitToMain, getHeadSha, getTree } from "../lib/self/github";
+import { LIMITS, checkChanges, checkResultingTree, type FileChange } from "../lib/self/policy";
 
 const fileChange = z.union([
   z.object({
@@ -17,8 +17,8 @@ const fileChange = z.union([
 
 export default defineTool({
   description:
-    `Commit a change to your own source on ${SELF_BRANCH}. A human must approve every call. ` +
-    "Skill changes apply on your next turn; code changes apply after Vercel finishes the deploy. " +
+    `Commit behavior-only Markdown to your own repository on ${SELF_BRANCH}. Only agent/instructions.md and eligible skill Markdown are writable; capabilities, integrations, architecture and runtime schedules are owner-controlled. A human must approve every call. ` +
+    "Skill changes apply on your next turn; identity changes apply after deployment. " +
     "Provide full file contents. baseSha must be the headSha you read; if main has moved, read again. " +
     `Max ${LIMITS.maxFiles} files. Load the self-modify skill before using this.`,
   inputSchema: z.object({
@@ -30,19 +30,18 @@ export default defineTool({
   approval: { request: always(), response: selfWriteResponse },
   async execute({ baseSha, message, files }, ctx) {
     // Validate before touching GitHub. Approval does not bypass policy.
-    const problems = checkChanges(files as FileChange[]);
-    if (problems.length > 0) {
-      throw new Error(`Rejected by self-modification policy:\n- ${problems.join("\n- ")}`);
+    const preliminaryProblems = checkChanges(files as FileChange[]);
+    if (preliminaryProblems.length > 0) {
+      throw new Error(`Rejected by self-modification policy:\n- ${preliminaryProblems.join("\n- ")}`);
     }
-
     const repo = requireSelfRepo();
     const authed = await toolRepo(ctx, repo);
     const head = await getHeadSha(authed);
-    if (head !== baseSha) {
-      throw new Error(
-        `main is at ${head}, not ${baseSha}. Someone (maybe you, in a replayed step) changed it. ` +
-          "Re-read the files and check self_history before retrying.",
-      );
+    if (head !== baseSha) throw new Error(`main is at ${head}, not ${baseSha}. Re-read the files before retrying.`);
+    const currentTree = await getTree(authed, head);
+    const problems = checkResultingTree(files as FileChange[], currentTree.filter((e) => e.type === "blob").map((e) => e.path));
+    if (problems.length > 0) {
+      throw new Error(`Rejected by self-modification policy:\n- ${problems.join("\n- ")}`);
     }
 
     const fullMessage =

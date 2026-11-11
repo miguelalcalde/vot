@@ -3,7 +3,7 @@ import { toolRepo } from "../lib/self/auth";
 import { z } from "zod";
 import { SELF_BRANCH, deployedSha, requireSelfRepo } from "../lib/self/config";
 import { listCommits } from "../lib/self/github";
-import { LIMITS, PROTECTED, WRITABLE } from "../lib/self/policy";
+import { LIMITS, PROTECTED, SELF_WRITE_POLICY, WRITABLE } from "../lib/self/policy";
 
 export default defineTool({
   description:
@@ -23,7 +23,7 @@ export default defineTool({
       deployedSha: running,
       deployedIsHead: running !== null && running === commits[0]?.sha,
       commits: commits.map((c) => ({ ...c, message: c.message.split("\n")[0] })),
-      policy: { writable: WRITABLE, protected: PROTECTED, limits: LIMITS },
+      policy: { writable: WRITABLE, protected: PROTECTED, limits: LIMITS, ...SELF_WRITE_POLICY },
     };
   },
 });

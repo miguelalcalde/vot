@@ -182,40 +182,45 @@ Every write goes through six layers:
    be installed only on this repository; this is defense in depth, not a sandbox.
 2. **Human approval.** `self_commit` and `self_revert` pause for approval on
    every call. With `SELF_APPROVERS` set, only those principals can approve.
-3. **Policy in code** (`agent/lib/self/policy.ts`), checked before any GitHub
-   call:
-   - Writable: `agent/instructions.md`, `agent/{skills,tools,lib,channels,connections,schedules,subagents}/`, `README.md`
-   - Protected: all self helpers including GitHub and Vercel reads (`agent/lib/self/`), the
+3. **Policy in code** (`agent/lib/self/policy.ts`), checked before a GitHub
+   write:
+   - Writable: `agent/instructions.md` and eligible Markdown skill entry points/references under `agent/skills/` only
+   - Protected: owner operating rules (`agent/instructions/operating-rules.md`), all self helpers including GitHub and Vercel reads (`agent/lib/self/`), the
      `self_*` tools, the live skill loader, the `self-modify` skill, setup instructions (`agent/instructions/setup.ts`), and web
      auth (`agent/channels/eve.ts`)
-   - Off-limits: `package.json`, the lockfile, `agent/agent.ts`, memory config,
-     `.github/`, and anything else not listed above
-   - Up to 10 files and 64 KB per file, no secrets, valid TypeScript syntax and
-     JSON, no references to self-connector configuration, GitHub API, or
-     `SELF_VERCEL_TOKEN` literals or self-auth helpers in new code,
-     skills need a description, instructions cannot be emptied
+   - All executable/configuration code, tools, channels, connections, schedules,
+     subagents, README, model configuration and other paths are owner-controlled.
+     Runtime schedules are independent runtime records, not source changes.
+   - Skill names and resulting trees are checked for Markdown-only packages,
+     required entry points, nonempty descriptions, collisions and reserved
+     owner identities (`self-modify`, `add-channel`, and `live`). Instructions
+     cannot be deleted or emptied. Up to 10 files and 64 KB per file; secrets
+     are rejected. Rollback blobs receive the same current content checks.
 
-   The code-content checks are tripwires, not a sandbox: agent-written tools
-   run with the app's environment. For code changes, the approval in layer 2
-   is the real gate, so read the diff before you approve.
+   The code-content checks are tripwires, not a sandbox. Prompt instructions
+   and skills are not the code-enforced security boundary.
 4. **Fast-forward only.** Commits go on top of the `headSha` the agent read and
    are never forced, so a concurrent human change is never overwritten.
 5. **Build gate.** Vercel only promotes a deployment whose build succeeds. A
    broken code change leaves the previous production deployment serving.
-6. **Rollback.** `self_revert` restores writable files from an earlier commit,
-   as a new commit.
+6. **Rollback.** `self_revert` restores eligible behavior Markdown from an
+   earlier commit as a new commit; paths outside the current policy are skipped
+   and invalid eligible restores are rejected atomically.
 
 Commits carry `Eve-Session` and `Eve-Requested-By` trailers for audit.
 
-To change what the agent may touch, edit `agent/lib/self/policy.ts` yourself.
-The agent cannot.
+Owner-maintained `agent/instructions/operating-rules.md` is always on and
+independent of the mutable character layer in `agent/instructions.md`. To
+change capabilities, integrations, operating rules, or what the agent may
+touch, edit the protected implementation yourself. The agent cannot.
 
 ## Layout
 
 ```text
 agent/
   agent.ts                  model
-  instructions.md           identity (agent-writable)
+  instructions.md           character and preferences (agent-writable)
+  instructions/operating-rules.md owner-maintained always-on rules
   instructions/setup.ts     settings-only setup guidance (protected)
   memory.ts                 shared notebook (disabled on Vercel without Blob)
   channels/eve.ts           HTTP/TUI channel (protected)

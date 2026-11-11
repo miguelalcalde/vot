@@ -5,7 +5,7 @@
 The deployed agent commits to `main` of this repo through `agent/tools/self_*.ts`,
 gated by `agent/lib/self/policy.ts`. When you edit this repo:
 
-- Keep `WRITABLE` and `PROTECTED` in `policy.ts` in sync with the README.
+- Keep behavior-only `WRITABLE` and `PROTECTED` in `policy.ts` in sync with the README.
 - Anything that enforces the guardrails (`agent/lib/self/`, `self_*` tools,
   `agent/skills/live.ts`, `agent/skills/self-modify/`) must stay in `PROTECTED`.
 - Keep `microsandbox` pinned to the version eve's peer range expects.
@@ -28,7 +28,7 @@ session is the backlog controller; other sessions only observe.
 
 This project uses the eve framework: an agent is a directory of files under `agent/`, and eve compiles and runs it.
 
-For a content-only change to the root agent's identity, purpose, tone, or response guidelines, edit its existing authored instructions. Fresh projects use `agent/instructions.md`; a project may instead use `agent/instructions.ts` or files under `agent/instructions/`. You do not need to read the framework docs for a content-only instructions change. A fresh project already has its selected model in `agent/agent.ts`; preserve that file unless the user asks to change the model.
+For a content-only change to the root agent's character, role, tone, or preferences, edit `agent/instructions.md`. Self-writes are limited to that file and eligible Markdown skills; owner-maintained operating rules live separately in `agent/instructions/operating-rules.md`. Do not change the model or executable capabilities through self-writes.
 
 ## Read the docs before writing code
 
