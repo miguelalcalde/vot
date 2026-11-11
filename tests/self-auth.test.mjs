@@ -185,6 +185,83 @@ test("AC4: live skills cache only complete loads, fall back for the same repo, a
   assert.equal(blobCalls, 2, "late results must not enter the reusable blob cache");
 });
 
+test("AC5: successive live heads atomically refresh flat/package bodies and nested references, then honor deletions", async () => {
+  resetLiveSkillCacheForTests();
+  const repo = { ...REPO };
+  let currentHead = "snapshot-1";
+  let treeCalls = 0;
+  const blobCalls = [];
+  const snapshots = {
+    "snapshot-1": [
+      ["agent/skills/flat.md", "flat-v1"],
+      ["agent/skills/packaged/SKILL.md", "package-v1"],
+      ["agent/skills/packaged/references/guide.md", "guide-v1"],
+      ["agent/skills/retired.md", "retired-v1"],
+    ],
+    "snapshot-2": [
+      ["agent/skills/flat.md", "flat-v2"],
+      ["agent/skills/packaged/SKILL.md", "package-v2"],
+      ["agent/skills/packaged/references/guide.md", "guide-v2"],
+      ["agent/skills/fresh.md", "fresh-v2"],
+    ],
+    "snapshot-3": [],
+  };
+  const contents = new Map([
+    ["flat-v1", "---\ndescription: Flat procedure.\n---\nFlat body v1"],
+    ["package-v1", "---\ndescription: Packaged procedure.\n---\nPackage body v1"],
+    ["guide-v1", "Guide reference v1"], ["retired-v1", "---\ndescription: Retired procedure.\n---\nRetired body"],
+    ["flat-v2", "---\ndescription: Flat procedure.\n---\nFlat body v2"],
+    ["package-v2", "---\ndescription: Packaged procedure.\n---\nPackage body v2"],
+    ["guide-v2", "Guide reference v2"],
+    ["fresh-v2", "---\ndescription: Fresh procedure.\n---\nFresh body v2"],
+  ]);
+  const deps = {
+    repo,
+    getAuthRepo: async (r) => authRepo(r),
+    head: async () => currentHead,
+    tree: async (_auth, sha) => {
+      treeCalls++;
+      assert.equal(sha, currentHead);
+      return snapshots[sha].map(([path, blobSha]) => ({ type: "blob", path, sha: blobSha, size: 128 }));
+    },
+    blob: async (_auth, blobSha) => { blobCalls.push(blobSha); return contents.get(blobSha); },
+  };
+  try {
+    const first = await loadLiveSkills(deps);
+    assert.equal(first.flat.markdown, "Flat body v1");
+    assert.equal(first.packaged.markdown, "Package body v1");
+    assert.equal(first.packaged.files["references/guide.md"], "Guide reference v1");
+    assert.equal(first.retired.markdown, "Retired body");
+    assert.equal(await loadLiveSkills(deps), first, "same-head lookups return the complete cached snapshot");
+    assert.equal(treeCalls, 1);
+    assert.equal(blobCalls.length, 4);
+
+    currentHead = "snapshot-2";
+    const second = await loadLiveSkills(deps);
+    assert.notEqual(second, first);
+    assert.deepEqual(Object.keys(second).sort(), ["flat", "fresh", "packaged"]);
+    assert.equal(second.flat.markdown, "Flat body v2");
+    assert.equal(second.packaged.markdown, "Package body v2");
+    assert.equal(second.packaged.files["references/guide.md"], "Guide reference v2");
+    assert.equal(second.fresh.markdown, "Fresh body v2");
+    assert.equal(second.retired, undefined, "removed entries do not leak from the prior head");
+    assert.equal(treeCalls, 2);
+    assert.equal(blobCalls.length, 8);
+
+    const warmFailure = await resilientLoadLiveSkills({ ...deps, head: async () => { throw new Error("synthetic GitHub outage"); } });
+    assert.equal(warmFailure, second, "same-repo failures use only the complete latest snapshot");
+    assert.equal(warmFailure.retired, undefined);
+
+    currentHead = "snapshot-3";
+    const emptied = await loadLiveSkills(deps);
+    assert.deepEqual(Object.keys(emptied), [], "a successful empty head produces an empty dynamic snapshot");
+    const outageAfterDeletion = await resilientLoadLiveSkills({ ...deps, head: async () => { throw new Error("synthetic GitHub outage after deletion"); } });
+    assert.equal(outageAfterDeletion, emptied, "last-good cache does not resurrect skills deleted at a successful head");
+    assert.deepEqual(Object.keys(outageAfterDeletion), []);
+    assert.equal(treeCalls, 3);
+  } finally { resetLiveSkillCacheForTests(); }
+});
+
 test("AC5: legacy credential reads are absent, guard paths remain aligned, and protections reject internals", async () => {
   const config = await (await import("node:fs/promises")).readFile(new URL("../agent/lib/self/config.ts", import.meta.url), "utf8");
   const readme = await (await import("node:fs/promises")).readFile(new URL("../README.md", import.meta.url), "utf8");
@@ -331,6 +408,86 @@ test("self_commit validates reference-only edits against the current tree and re
 
     await assert.rejects(commitTool.execute({ baseSha: head, message: "Create orphan reference", files: [{ path: "agent/skills/missing/references/guide.md", content: "Orphan" }] }, ctx), /no SKILL.md entry point/);
     assert.deepEqual(writeCalls, [], "a genuine orphan is rejected before any GitHub write");
+  } finally {
+    globalThis.fetch = original;
+    priorRepo === undefined ? delete process.env.SELF_REPO : process.env.SELF_REPO = priorRepo;
+  }
+});
+
+test("AC4: self_revert rejects every non-ancestor compare status and the 300-file cap before writes", async () => {
+  const head = "f".repeat(40), target = "e".repeat(40);
+  const original = globalThis.fetch;
+  try {
+    await withEnv({ SELF_REPO: "org/agent" }, async () => {
+      for (const status of ["behind", "diverged", "identical"]) {
+        const calls = [];
+        globalThis.fetch = async (url, init = {}) => {
+          const path = String(url); calls.push({ path, method: init.method ?? "GET" });
+          if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: head } });
+          if (path.includes("/compare/")) return Response.json({ status, files: [{ filename: "agent/instructions.md" }] });
+          return Response.json({});
+        };
+        await assert.rejects(revertTool.execute({ targetSha: target, baseSha: head, reason: `Reject ${status} compare status safely` }, {
+          getToken: async () => ({ token: "test-bearer" }), requireAuth() {}, session: { id: "test", auth: {} },
+        }), /is not an ancestor of main/);
+        assert.equal(calls.filter((call) => call.path.includes("/compare/")).length, 1);
+        assert.deepEqual(calls.filter((call) => ["POST", "PATCH"].includes(call.method)), [], `${status} must not create objects or update main`);
+      }
+
+      let recursiveTreeCalls = 0;
+      const writes = [];
+      globalThis.fetch = async (url, init = {}) => {
+        const path = String(url);
+        if (init.method === "POST" || init.method === "PATCH") writes.push(path);
+        if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: head } });
+        if (path.includes("/compare/")) return Response.json({ status: "ahead", files: Array.from({ length: 300 }, (_, i) => ({ filename: `agent/skills/example-${i}.md` })) });
+        if (path.includes("/git/trees/") && path.includes("?recursive=1")) recursiveTreeCalls++;
+        return Response.json({});
+      };
+      await assert.rejects(revertTool.execute({ targetSha: target, baseSha: head, reason: "Reject the comparison file cap safely" }, {
+        getToken: async () => ({ token: "test-bearer" }), requireAuth() {}, session: { id: "test", auth: {} },
+      }), /Too many changes since that commit to roll back safely/);
+      assert.equal(recursiveTreeCalls, 0, "the 300-file boundary rejects before building any partial rollback plan");
+      assert.deepEqual(writes, [], "cap rejection does not create Git objects or update main");
+    });
+  } finally { globalThis.fetch = original; }
+});
+
+test("AC4: a valid rollback plan never force-updates or retries a raced main ref", async () => {
+  const priorRepo = process.env.SELF_REPO;
+  process.env.SELF_REPO = "org/agent";
+  const head = "a".repeat(40), target = "b".repeat(40), winner = "c".repeat(40);
+  let mainRef = head;
+  const objectWrites = [], refUpdates = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const path = String(url);
+    if (path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: mainRef } });
+    if (path.includes("/compare/")) return Response.json({ status: "ahead", files: [{ filename: "agent/instructions.md" }] });
+    if (path.endsWith(`/git/commits/${target}`)) return Response.json({ tree: { sha: "tree-target" } });
+    if (path.endsWith(`/git/commits/${head}`)) return Response.json({ tree: { sha: "tree-current" } });
+    if (path.endsWith("/git/trees/tree-target?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "blob-history" }] });
+    if (path.endsWith("/git/trees/tree-current?recursive=1")) return Response.json({ truncated: false, tree: [{ type: "blob", path: "agent/instructions.md", sha: "blob-current" }] });
+    if (path.endsWith("/git/blobs/blob-history")) return Response.json({ encoding: "base64", content: Buffer.from("A sufficiently long historical character layer with preferences and response style.").toString("base64") });
+    if (path.endsWith("/git/trees") && init.method === "POST") { objectWrites.push(path); return Response.json({ sha: "rollback-tree" }); }
+    if (path.endsWith("/git/commits") && init.method === "POST") {
+      objectWrites.push(path);
+      mainRef = winner; // A competing writer advances main after objects are created.
+      return Response.json({ sha: "rollback-commit", html_url: "https://example.test/rollback" });
+    }
+    if (path.endsWith("/git/refs/heads/main") && init.method === "PATCH") {
+      refUpdates.push(JSON.parse(init.body));
+      return new Response("reference update is not a fast-forward", { status: 422 });
+    }
+    return Response.json({});
+  };
+  try {
+    await assert.rejects(revertTool.execute({ targetSha: target, baseSha: head, reason: "Restore valid behavior after regression" }, {
+      getToken: async () => ({ token: "test-bearer" }), requireAuth() {}, session: { id: "test", auth: {} },
+    }), /main moved while committing; nothing was changed/);
+    assert.equal(objectWrites.length, 2, "tree and commit objects may exist before the ref race is detected");
+    assert.deepEqual(refUpdates, [{ sha: "rollback-commit", force: false }]);
+    assert.equal(mainRef, winner, "the competing writer's main ref remains intact");
   } finally {
     globalThis.fetch = original;
     priorRepo === undefined ? delete process.env.SELF_REPO : process.env.SELF_REPO = priorRepo;
